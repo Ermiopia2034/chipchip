@@ -15,6 +15,7 @@ INTENTS = [
     "registration_supplier",
     "product_inquiry",
     "knowledge_query",
+    "image_generation",
     "place_order",
     "check_customer_orders",
     "add_inventory",
@@ -173,6 +174,20 @@ class IntentDetector:
         ]
         if any(tok in lt for tok in knowledge_tokens_en) or any(tok in (text or "") for tok in knowledge_tokens_am):
             return {"intent": "knowledge_query", "entities": entities}
+
+        # Image generation heuristics: generate image/photo/picture (EN + Amharic cues)
+        image_tokens_en = [
+            "generate image", "generate a image", "generate a photo", "generate photo",
+            "image of", "photo of", "picture of", "create image", "make an image", "render",
+            "image", "photo", "picture",
+        ]
+        image_tokens_am = [
+            "ምስል",  # image
+            "ፎቶ",   # photo
+            "ስእል",  # picture/image
+        ]
+        if any(tok in lt for tok in image_tokens_en) or any(tok in (text or "") for tok in image_tokens_am):
+            return {"intent": "image_generation", "entities": entities}
 
         # 2) LLM-based detection (may be unavailable without network)
         prompt = (

@@ -121,6 +121,14 @@ class ConversationOrchestrator:
             await self.sessions.add_message(session_id, "assistant", tool_msg)
             return {"type": "text", "content": tool_msg, "metadata": {"intent": intent}}
 
+        # Deterministic image generation routing
+        if intent == "image_generation":
+            # Try to extract a product name implicitly via tool's inference by passing the raw query
+            tool_result = await self.tools.generate_product_image_handler({"query": user_message}, session_id=session_id)
+            msg = tool_result.get("message", "")
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+
         if intent == "check_stock":
             tool_result = await self.tools.check_supplier_stock_handler({}, session_id=session_id)
             msg = tool_result.get("message", "")
@@ -244,6 +252,7 @@ class ConversationOrchestrator:
             "add_inventory": States.ADDING_INVENTORY,
             "product_inquiry": States.QUERYING,
             "knowledge_query": States.QUERYING,
+            "image_generation": States.QUERYING,
             "check_stock": States.QUERYING,
             "check_schedule": States.QUERYING,
             "flash_sale_check": States.QUERYING,

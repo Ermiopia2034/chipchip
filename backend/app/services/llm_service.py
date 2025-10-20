@@ -38,6 +38,18 @@ def _tool_declarations() -> List[Dict[str, Any]]:
             "parameters": _schema("OBJECT", properties={"product_name": _schema("STRING")}, required=["product_name"]),
         },
         {
+            "name": "generate_product_image",
+            "description": "Generate a product image and return a static URL",
+            "parameters": _schema(
+                "OBJECT",
+                properties={
+                    "product_name": _schema("STRING"),
+                    "style": _schema("STRING"),
+                },
+                required=["product_name"],
+            ),
+        },
+        {
             "name": "rag_query",
             "description": "Search product knowledge base for storage, nutrition, recipes, selection tips, seasonality",
             "parameters": _schema(

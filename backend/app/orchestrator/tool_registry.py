@@ -40,6 +40,7 @@ class ToolRegistry:
             "rag_query": self.rag_query_handler,
             "create_order": self.create_order_handler,
             "add_inventory": self.add_inventory_handler,
+            "generate_product_image": self.generate_product_image_handler,
             "check_supplier_stock": self.check_supplier_stock_handler,
             "get_supplier_schedule": self.get_supplier_schedule_handler,
             "suggest_flash_sale": self.suggest_flash_sale_handler,
@@ -332,6 +333,47 @@ class ToolRegistry:
         if corrected_from2:
             msg = f"I’ll use {canonical} (from '{corrected_from2}').\n" + msg
         return ToolResult.ok({"inventory_id": inv_id, "image_url": image_url}, msg)
+
+    async def generate_product_image_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
+        """Generate an image for a product and return its URL."""
+        pname_arg = str(args.get("product_name", "")).strip()
+        query = str(args.get("query", "")).strip()
+        pname = pname_arg or query
+        if not pname:
+            return ToolResult.fail("product_name is required")
+
+        # Normalize to canonical product name
+        ql = pname.lower()
+        product = await self.db.get_product_by_name(pname)
+        corrected_from: str | None = None
+        if not product:
+            try:
+                # Try substring match against catalog first
+                all_products = await self.db.get_all_products()
+                for p in all_products:
+                    pn = (p.product_name or "").strip()
+                    if pn and pn.lower() in ql:
+                        product = p
+                        corrected_from = pname
+                        break
+            except Exception:
+                pass
+        if not product:
+            maybe, score = await self.db.fuzzy_get_product_by_name(pname, threshold=0.65)
+            if maybe is None:
+                return ToolResult.fail(f"Unknown product '{pname}'")
+            corrected_from = pname
+            product = maybe
+
+        try:
+            url = self.images.generate_product_image(product.product_name)
+        except Exception as e:
+            return ToolResult.fail(f"Image generation failed: {e}")
+
+        msg = f"Image generated for {product.product_name}: {url}"
+        if corrected_from:
+            msg = f"I’ll use {product.product_name} (from '{corrected_from}').\n" + msg
+        return ToolResult.ok({"image_url": url, "product_name": product.product_name}, msg)
 
     async def check_supplier_stock_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
         if not session_id:
