@@ -4,6 +4,7 @@ import asyncio
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from difflib import SequenceMatcher
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import select, func, update, and_, or_, text
@@ -81,6 +82,32 @@ class DatabaseService:
                 select(Product).where(func.lower(Product.product_name) == name.lower())
             )
             return res.scalar_one_or_none()
+
+    async def fuzzy_get_product_by_name(self, name: str, threshold: float = 0.8) -> Tuple[Optional[Product], float]:
+        """
+        Find the most similar product by name using a simple ratio. Returns (Product|None, score).
+        Accepted when score >= threshold.
+        """
+        target = (name or "").strip().lower()
+        if not target:
+            return None, 0.0
+        try:
+            products = await self.get_all_products()
+        except Exception:
+            return None, 0.0
+        best: Optional[Product] = None
+        best_score: float = 0.0
+        for p in products:
+            cand = (p.product_name or "").strip().lower()
+            if not cand:
+                continue
+            score = SequenceMatcher(None, target, cand).ratio()
+            if score > best_score:
+                best = p
+                best_score = score
+        if best_score >= threshold:
+            return best, best_score
+        return None, best_score
 
     async def search_products(self, query: str) -> List[Product]:
         async with self._session_factory() as session:

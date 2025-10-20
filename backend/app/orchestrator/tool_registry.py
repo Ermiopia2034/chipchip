@@ -103,8 +103,14 @@ class ToolRegistry:
             return ToolResult.fail("product_name is required")
 
         product = await self.db.get_product_by_name(product_name)
+        corrected_from: str | None = None
         if not product:
-            return ToolResult.fail(f"Unknown product '{product_name}'")
+            # Fuzzy correction for obvious misspellings
+            maybe, score = await self.db.fuzzy_get_product_by_name(product_name, threshold=0.8)
+            if maybe is None:
+                return ToolResult.fail(f"Unknown product '{product_name}'")
+            corrected_from = product_name
+            product = maybe
 
         rec = await self.db.calculate_pricing_recommendation(product.product_id)
 
@@ -122,6 +128,8 @@ class ToolRegistry:
             f"Historical selling price: {fmt(rec.get('historical_avg'))} ETB/kg\n\n"
             f"Recommendation: Set price at {fmt(rec.get('recommended'))} ETB/kg for competitive positioning and quick turnover."
         )
+        if corrected_from:
+            msg = f"I’ll use {product.product_name} (from '{corrected_from}').\n\n" + msg
         return ToolResult.ok(rec, msg)
 
     async def rag_query_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
@@ -236,15 +244,21 @@ class ToolRegistry:
             expiry_date = dt.date.fromisoformat(expiry_raw) if isinstance(expiry_raw, str) else expiry_raw
 
         product = await self.db.get_product_by_name(pname)
+        corrected_from2: str | None = None
         if not product:
-            return ToolResult.fail(f"Unknown product '{pname}'")
+            maybe, score = await self.db.fuzzy_get_product_by_name(pname, threshold=0.8)
+            if maybe is None:
+                return ToolResult.fail(f"Unknown product '{pname}'")
+            corrected_from2 = pname
+            product = maybe
 
         image_url = None
         if gen_img:
             try:
-                image_url = self.images.generate_product_image(pname)
+                # Use canonical product name for image prompt
+                image_url = self.images.generate_product_image(product.product_name)
             except Exception as e:
-                logging.getLogger(__name__).warning("Image generation failed for %s: %s", pname, e)
+                logging.getLogger(__name__).warning("Image generation failed for %s: %s", product.product_name, e)
 
         inv_id = await self.db.add_inventory(
             supplier_id=supplier_id,
@@ -256,11 +270,14 @@ class ToolRegistry:
             image_url=image_url,
         )
 
-        msg = f"Inventory added: {pname} {qty}kg @ {ppu} ETB/kg (id={inv_id})"
+        canonical = product.product_name
+        msg = f"Inventory added: {canonical} {qty}kg @ {ppu} ETB/kg (id={inv_id})"
         if image_url:
             msg += f"\nImage: {image_url}"
         elif gen_img:
             msg += "\nImage generation failed."
+        if corrected_from2:
+            msg = f"I’ll use {canonical} (from '{corrected_from2}').\n" + msg
         return ToolResult.ok({"inventory_id": inv_id, "image_url": image_url}, msg)
 
     async def check_supplier_stock_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
@@ -553,7 +570,10 @@ def _infer_category(product_name: str) -> Optional[str]:
             qty = float(it.get("quantity_kg"))
             product = await self.db.get_product_by_name(pname)
             if not product:
-                return ToolResult.fail(f"Unknown product '{pname}'")
+                maybe, score = await self.db.fuzzy_get_product_by_name(pname, threshold=0.8)
+                if maybe is None:
+                    return ToolResult.fail(f"Unknown product '{pname}'")
+                product = maybe
             inv_list = await self.db.get_available_inventory(product.product_id)
             price = min((float(i.price_per_unit) for i in inv_list), default=None)
             if price is None:

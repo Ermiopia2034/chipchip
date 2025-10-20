@@ -2,11 +2,17 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createSessionId, createSocket, SocketClient, ServerToClientEvents, ClientToServerEvents } from "./socketClient";
+import { parseAssistantPayload, shouldSimulateCOD, type ParsedKind } from "./messageParser";
 
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  kind?: ParsedKind;
+  data?: any;
+  actions?: { id: string; label: string }[];
+  metadata?: any;
+  raw?: any;
 };
 
 type ChatState = {
@@ -32,10 +38,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [language, setLanguage] = useState<string>(() => {
-    if (typeof window === "undefined") return "auto";
-    return localStorage.getItem("chat_language") || "auto";
-  });
+  // Language handling intentionally omitted per requirements
+  const [language, setLanguage] = useState<string>("auto");
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8005";
   const socketRef = useRef<SocketClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -92,14 +96,51 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
     });
     socket.on("response", (payload: Parameters<ServerToClientEvents["response"]>[0]) => {
-      const content = payload?.content ?? payload?.message ?? "";
-      if (content) {
-        const msg: ChatMessage = { role: "assistant", content, timestamp: Date.now() };
+      const parsed = parseAssistantPayload(payload);
+      if (parsed?.content != null) {
+        const msg: ChatMessage = {
+          role: "assistant",
+          content: String(parsed.content),
+          timestamp: Date.now(),
+          kind: parsed.kind,
+          data: parsed.data,
+          actions: parsed.actions,
+          metadata: parsed.metadata,
+          raw: payload,
+        };
         setMessages((m) => {
           const next = [...m, msg];
           if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
           return next;
         });
+
+        // Simulate COD processing pause if indicated by content
+        if (shouldSimulateCOD(msg.content)) {
+          const statusMsg: ChatMessage = {
+            role: "assistant",
+            content: "Processing Cash on Delivery…",
+            kind: "status",
+            timestamp: Date.now(),
+          };
+          setMessages((m) => {
+            const next = [...m, statusMsg];
+            if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
+            return next;
+          });
+          setTimeout(() => {
+            const done: ChatMessage = {
+              role: "assistant",
+              content: "Order Confirmed for COD",
+              timestamp: Date.now(),
+              kind: "text",
+            };
+            setMessages((m) => {
+              const next = [...m, done];
+              if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
+              return next;
+            });
+          }, 5000);
+        }
       }
     });
     socket.on("app_error", (p) => {
@@ -144,7 +185,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const setLang = useCallback((lang: string) => {
     setLanguage(lang);
-    if (typeof window !== "undefined") localStorage.setItem("chat_language", lang);
   }, []);
 
   const value = useMemo(

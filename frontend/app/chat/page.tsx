@@ -5,7 +5,7 @@ import { ChatProvider, useChat } from "@/lib/chatStore";
 import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
-import LanguageSelector from "@/components/LanguageSelector";
+import QuickActionsBar from "@/components/QuickActionsBar";
 import Link from "next/link";
 
 function ChatView() {
@@ -16,7 +16,7 @@ function ChatView() {
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, isTyping]);
 
   const header = useMemo(() => (
     <div className="flex items-center justify-between py-3 px-4 border-b border-black/10 dark:border-white/10">
@@ -33,21 +33,27 @@ function ChatView() {
           </div>
         </div>
       </div>
-      <LanguageSelector />
+      {/* Language selector removed per requirements */}
     </div>
   ), [isConnected, sessionId]);
 
   return (
     <div className="relative min-h-screen px-2 sm:px-6 py-4">
+      {/* Decorative gradients for chat page */}
+      <div className="pointer-events-none absolute -top-24 -left-24 h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--brand)/0.18)_0%,transparent_60%)] float-slow" />
+      <div className="pointer-events-none absolute -bottom-24 -right-24 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--brand-2)/0.18)_0%,transparent_60%)] float-slow float-delay" />
       <div className="mx-auto w-full max-w-3xl rounded-2xl glass border border-black/10 dark:border-white/10 shadow-lg">
         {header}
-        <div ref={listRef} className="flex-1 overflow-y-auto py-4 px-3 sm:px-4" style={{ maxHeight: "calc(100dvh - 200px)" }}>
+        <div ref={listRef} className="flex-1 overflow-y-auto py-4 px-3 sm:px-4 bg-grid chat-scroll pretty-scroll" style={{ maxHeight: "calc(100dvh - 200px)" }}>
           {messages.map((m, i) => (
             <ChatMessage key={i} message={m} />
           ))}
           <TypingIndicator visible={isTyping} />
         </div>
         <div className="px-3 sm:px-4 pb-4">
+          <div className="mb-3">
+            <QuickActionsBar />
+          </div>
           <ChatInput />
         </div>
       </div>
@@ -58,7 +64,34 @@ function ChatView() {
 export default function ChatPage() {
   return (
     <ChatProvider>
-      <ChatView />
+      <ActionBridge>
+        <ChatView />
+      </ActionBridge>
     </ChatProvider>
   );
+}
+
+function ActionBridge({ children }: { children: React.ReactNode }) {
+  const { sendMessage } = useChat();
+  useEffect(() => {
+    const handler = (e: any) => {
+      const id = e?.detail?.id as string | undefined;
+      const source = e?.detail?.message;
+      if (!id) return;
+      if (id === "use_recommended") {
+        const rec = source?.data?.recommended;
+        const product = source?.data?.product;
+        const txt = rec && product ? `Set ${product} price to ${rec} ETB/kg` : "Use recommended price";
+        sendMessage(txt);
+      } else if (id === "set_custom") {
+        const product = source?.data?.product;
+        sendMessage(`I want to set a custom price for ${product}`);
+      } else if (id === "run_flash_sale") {
+        sendMessage("Yes, run the suggested flash sale to clear expiring stock");
+      }
+    };
+    window.addEventListener("cc-action", handler as EventListener);
+    return () => window.removeEventListener("cc-action", handler as EventListener);
+  }, [sendMessage]);
+  return <>{children}</>;
 }

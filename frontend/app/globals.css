@@ -116,3 +116,21 @@ body {
 }
 .btn-glow:hover { box-shadow: 0 8px 30px hsl(var(--brand-2) / 0.35); transform: translateY(-1px); }
 .btn-glow:active { transform: translateY(0); }
+
+/* Pretty scrollbars for chat */
+.pretty-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.pretty-scroll::-webkit-scrollbar-track { background: transparent; }
+.pretty-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, hsl(var(--brand-2) / 0.8), hsl(var(--brand-3) / 0.8));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.pretty-scroll { scrollbar-width: thin; scrollbar-color: hsl(var(--brand-2)) transparent; }
+
+/* Markdown content tweaks */
+.mdx-content .md-h { margin: 0.25rem 0 0.5rem; font-weight: 600; }
+.mdx-content .md-code { background: rgba(0,0,0,0.05); padding: 0.5rem 0.75rem; border-radius: 0.75rem; overflow: auto; }
+.mdx-content .md-inline { background: rgba(0,0,0,0.06); padding: 1px 6px; border-radius: 6px; }
+.mdx-content .md-link { color: hsl(var(--brand-2)); text-decoration: underline; }
+.mdx-content .md-list { margin: 0.25rem 0 0.5rem 1.25rem; }
