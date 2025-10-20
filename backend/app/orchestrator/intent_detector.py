@@ -61,11 +61,13 @@ class IntentDetector:
             return {"intent": f"registration_{user_type}", "entities": entities}
 
         # Add inventory heuristics: detect structured supplier additions
-        # Triggers: phrases like "add inventory", or patterns with kg + ETB and availability
+        # Triggers: phrases like "add inventory", or patterns with kg + ETB and availability,
+        # or simple phrasing like "I want to add tomatoes" (open the form).
         if (
             "add inventory" in lt
             or ("add" in lt and "kg" in lt and ("etb" in lt or "etb/kg" in lt))
             or ("available date" in lt and "expiry date" in lt)
+            or re.search(r"(?i)\b(?:i\s*want\s*to\s*add|add)\b", t) is not None
         ):
             # Extract fields
             qty_m = re.search(r"(\d+(?:\.\d+)?)\s*kg", t, flags=re.IGNORECASE)
@@ -101,6 +103,11 @@ class IntentDetector:
                 entities["price_per_unit"] = float(price_m.group(1))
             if pname:
                 entities["product_name"] = pname
+            else:
+                # Simpler capture after "add ..." to pre-fill product when user writes natural intent
+                _p4 = re.search(r"(?i)\b(?:i\s*want\s*to\s*add|add)\s+([A-Za-z\u1200-\u137F'\- ]{2,}?)(?=\s*(?:,|\.|$|\d+\s*kg|at\b|available\b))", t)
+                if _p4:
+                    entities["product_name"] = _p4.group(1).strip()
             if avail_m:
                 entities["available_date"] = avail_m.group(1)
             if exp_m:

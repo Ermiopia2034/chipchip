@@ -116,6 +116,14 @@ export function parseAssistantPayload(payload: unknown): ParsedMessage {
     return { kind: "image", content, data: { url: explicit["url"] }, metadata };
   }
 
+  // Allow backend to explicitly request a guided form rendering
+  if (explicitType === "add_inventory_form") {
+    return { kind: "add_inventory_form", content, metadata };
+  }
+  if (explicitType === "registration_form") {
+    return { kind: "registration_form", content, metadata };
+  }
+
   const imageUrl = parseImageFromContent(content);
   if (imageUrl) return { kind: "image", content, data: { url: imageUrl }, metadata };
 
