@@ -103,11 +103,3 @@ xdg-open http://localhost:3005 || open http://localhost:3005 || echo "Open http:
 ```
 
 Backend API docs (if enabled): http://localhost:8005/docs
-
-## Notes
-
-- All commands reflect the documented architecture and progress notes in:
-  - `architecture_document.md`
-  - `project_knowledge.md`
-  - `progress_report.md`
-  - `production_guide.md`

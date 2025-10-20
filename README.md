@@ -121,6 +121,12 @@ Notes
 - Chroma exposed on host `8001` for troubleshooting.
 - Logs: `docker compose -f docker-compose.prod.yml logs -f backend`
 
+## Future Enhancements
+- Increase robustness via rigorous testing (unit, integration, load).
+- Expand toolset (additional DB queries, supplier/customer ops, analytics).
+- Improve prompts (clearer system prompt, tighter tool schemas, evaluation).
+- Integrate realtime payment gateway (webhooks + status updates in UI).
+
 ## AI Agent Architecture
 
 ```mermaid
