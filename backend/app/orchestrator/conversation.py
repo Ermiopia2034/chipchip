@@ -126,7 +126,14 @@ class ConversationOrchestrator:
             # Try to extract a product name implicitly via tool's inference by passing the raw query
             tool_result = await self.tools.generate_product_image_handler({"query": user_message}, session_id=session_id)
             msg = tool_result.get("message", "")
+            data = tool_result.get("data") or {}
+            url = (data or {}).get("image_url") if isinstance(data, dict) else None
+            # Persist a short caption in history for continuity
             await self.sessions.add_message(session_id, "assistant", msg)
+            if isinstance(url, str) and url:
+                # Send explicit image payload so the UI renders an image bubble
+                return {"type": "image", "content": msg, "data": {"url": url}, "metadata": {"intent": intent}}
+            # Fallback to text if URL missing
             return {"type": "text", "content": msg, "metadata": {"intent": intent}}
 
         if intent == "check_stock":
