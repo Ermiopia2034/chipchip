@@ -120,3 +120,59 @@ Notes
 - Generated product images persist in `backend_static` volume (`/app/static`).
 - Chroma exposed on host `8001` for troubleshooting.
 - Logs: `docker compose -f docker-compose.prod.yml logs -f backend`
+
+## AI Agent Architecture
+
+```mermaid
+sequenceDiagram
+    participant UI as Frontend (Next.js)
+    participant SIO as Socket.IO
+    participant API as FastAPI (ASGI)
+    participant Orc as ConversationOrchestrator
+    participant Redis as SessionManager (Redis)
+    participant LLM as Gemini 2.5 Pro
+    participant Tools as ToolRegistry
+    participant DB as DatabaseService (Postgres)
+    participant RAG as VectorDBService (Chroma)
+    participant Img as ImageService (Gemini Image → /static)
+
+    UI->>SIO: emit("message", { sessionId, text })
+    SIO->>API: route WS event
+    API->>Orc: process_message(sessionId, text)
+    Orc->>Redis: get_session + add_message(user)
+    Orc->>LLM: chat(messages, tools)
+    alt one or more tool calls
+        LLM-->>Orc: function_call(name, args)
+        Orc->>Tools: execute(name, args, sessionId)
+        alt DB-backed
+            Tools->>DB: query/insert/update
+            DB-->>Tools: data
+        else RAG search
+            Tools->>RAG: semantic_search(query)
+            RAG-->>Tools: passages
+        else Image gen
+            Tools->>Img: generate_product_image(name)
+            Img-->>Tools: /static/images/… URL
+        end
+        Tools-->>Orc: ToolResult { success, data, message }
+        Orc->>LLM: chat(+tool context, tools)
+    end
+    LLM-->>Orc: text
+    Orc->>Redis: add_message(assistant)
+    Orc-->>SIO: emit("response", { type, content, data? })
+```
+
+### How it works
+
+- Single agent: All user messages go straight to Gemini 2.5 Pro; no separate intent router.
+- Session + history: Sessions live in Redis. We store up to `MAX_CONVERSATION_HISTORY` (default 20) and send the last 10 messages plus a short preface on each turn.
+- Tool loop: Orchestrator runs a bounded tool-calling loop (max 3). When Gemini calls a tool, we execute it, feed the result back as context, and let Gemini finalize.
+- Image results: For `generate_product_image`, we return a typed `{ type: "image", data: { url }, content }` payload so the UI renders an image bubble.
+- Data integrity: The agent must not fabricate inventory/orders/schedules/prices/quantities; it only states such data after a tool call in the same turn.
+- Dates/time: The agent never asks for date ranges. It uses `get_current_time` to resolve “today/this week/next week” and calls `get_supplier_schedule` (defaults to current week if dates omitted).
+- Empty replies: The orchestrator prevents blank responses. If tools return nothing, it returns an explicit message (e.g., “No results were returned by the requested operation.”).
+
+### Tools (high level)
+
+- `get_current_time`, `register_user`, `search_products`, `get_pricing_insights`, `generate_product_image`, `rag_query`
+- `create_order`, `add_inventory`, `check_supplier_stock`, `get_supplier_schedule`, `suggest_flash_sale`, `get_customer_orders`

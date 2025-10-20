@@ -43,3 +43,11 @@ docker-compose.*.local.yml
 
 # Coverage
 coverage/
+
+# Markdown
+# Ignore all Markdown files by default, except core docs we keep tracked
+*.md
+!run_guide.md
+!progress_report.md
+!architecture_document.md
+!implementation_plan.md
