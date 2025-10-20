@@ -51,3 +51,10 @@ coverage/
 !progress_report.md
 !architecture_document.md
 !implementation_plan.md
+!README.md
+
+# Explicitly ignore these unneeded markdown files
+production_guide.md
+project_knowledge.md
+detailed_imp.md
+rules.md
