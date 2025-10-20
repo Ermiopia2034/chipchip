@@ -283,6 +283,7 @@ class ConversationOrchestrator:
             "Data integrity: Never fabricate inventory items, order lists, schedules, prices, or quantities. Only present such data if you called a tool this turn and it returned that data. If data is needed, call the appropriate tool first (e.g., check_supplier_stock, get_customer_orders, get_supplier_schedule, suggest_flash_sale).\n"
             "Supplier context: If user_type == 'supplier', treat questions like 'my items expiring' or 'my inventory' as supplier inventory requests — call suggest_flash_sale with days_threshold from the user's phrasing (default 3). Never claim a tool is unavailable for customers when the session user_type is 'supplier'.\n"
             "Expiry checks (suppliers): If asked about expiring items (e.g., 'in the next 3 days'), call suggest_flash_sale with days_threshold (default 3).\n"
+            "Reliability: Never send an empty reply. If a tool returns no data or you cannot produce an answer, explicitly state that no results were found or that the operation could not be completed.\n"
         )
         history = session.get("conversation_history") or []
         messages: List[Dict[str, str]] = [{"role": "user", "content": preface}]
@@ -348,11 +349,14 @@ class ConversationOrchestrator:
                 await self.sessions.add_message(session_id, "assistant", content)
                 return {"type": "text", "content": content}
         # Fallbacks
-        if last_tool_msg:
-            await self.sessions.add_message(session_id, "assistant", last_tool_msg)
-            return {"type": "text", "content": last_tool_msg}
-        # As a last resort, if no tool was called and no content produced, provide a minimal safe completion without fabricating
-        safe = ""
+        if any_tool_called:
+            msg = (last_tool_msg or "").strip()
+            if not msg:
+                msg = "No results were returned by the requested operation."
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg}
+        # As a last resort when no tool was called and no content produced, return an explicit non-empty message
+        safe = "No results were returned by the requested operation."
         await self.sessions.add_message(session_id, "assistant", safe)
         return {"type": "text", "content": safe}
 
