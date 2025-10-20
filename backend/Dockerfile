@@ -25,8 +25,9 @@ COPY requirements.txt ./
 RUN python -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# App code
+# App code and maintenance scripts
 COPY app ./app
+COPY scripts ./scripts
 
 EXPOSE 8000
 
