@@ -6,6 +6,7 @@ import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import QuickActionsBar from "@/components/QuickActionsBar";
+import ChatHistoryMenu from "@/components/ChatHistoryMenu";
 import Link from "next/link";
 import type { ChatMessage as ChatMsg } from "@/lib/chatStore";
 
@@ -34,7 +35,8 @@ function ChatView() {
           </div>
         </div>
       </div>
-      <div>
+      <div className="flex items-center gap-2">
+        <ChatHistoryMenu />
         <button
           type="button"
           onClick={() => newThread()}

@@ -15,6 +15,8 @@ export type ChatMessage = {
   raw?: unknown;
 };
 
+type ThreadMeta = { id: string; title: string; updatedAt: number };
+
 type ChatState = {
   messages: ChatMessage[];
   sessionId: string | null;
@@ -22,6 +24,7 @@ type ChatState = {
   isTyping: boolean;
   language: string;
   backendUrl: string;
+  threads: ThreadMeta[];
 };
 
 type ChatActions = {
@@ -30,6 +33,7 @@ type ChatActions = {
   setLanguage: (lang: string) => void;
   clearChat: () => void;
   newThread: () => Promise<void>;
+  openThread: (id: string) => void;
 };
 
 const ChatContext = createContext<(ChatState & ChatActions) | null>(null);
@@ -44,6 +48,40 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8005";
   const socketRef = useRef<SocketClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const [threads, setThreads] = useState<ThreadMeta[]>([]);
+
+  // Threaded history helpers (local only)
+  const THREAD_INDEX_KEY = "chat_threads_index";
+  const threadKey = (id: string) => `chat_thread_${id}`;
+
+  const readThreads = useCallback((): ThreadMeta[] => {
+    if (typeof window === "undefined") return [] as ThreadMeta[];
+    try {
+      return JSON.parse(localStorage.getItem(THREAD_INDEX_KEY) || "[]") as ThreadMeta[];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const writeThreads = useCallback((arr: ThreadMeta[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(THREAD_INDEX_KEY, JSON.stringify(arr));
+    setThreads(arr);
+  }, []);
+
+  const saveThreadMessages = useCallback((id: string, msgs: ChatMessage[]) => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(threadKey(id), JSON.stringify(msgs));
+  }, []);
+
+  const loadThreadMessages = useCallback((id: string): ChatMessage[] => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(localStorage.getItem(threadKey(id)) || "[]");
+    } catch {
+      return [];
+    }
+  }, []);
 
   // Keep a live ref of sessionId for event handlers without re-creating effects
   useEffect(() => {
@@ -53,10 +91,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Persist and restore session + history
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // Load thread index first
+    setThreads(readThreads());
     const savedSession = localStorage.getItem("session_id");
     const savedHistory = localStorage.getItem("chat_history");
-    if (savedSession) setSessionId(savedSession);
-    if (savedHistory) {
+    if (savedSession) {
+      setSessionId(savedSession);
+      const threadMsgs = loadThreadMessages(savedSession);
+      if (threadMsgs.length) {
+        setMessages(threadMsgs);
+      } else if (savedHistory) {
+        try {
+          setMessages(JSON.parse(savedHistory));
+        } catch {}
+      }
+    } else if (savedHistory) {
       try {
         setMessages(JSON.parse(savedHistory));
       } catch {}
@@ -112,6 +161,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setMessages((m) => {
           const next = [...m, msg];
           if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
+          const sid = sessionIdRef.current;
+          if (sid) {
+            saveThreadMessages(sid, next);
+            // Update thread meta
+            const firstUser = next.find((mm) => mm.role === "user");
+            const title = firstUser?.content?.slice(0, 48) || "New chat";
+            const idx: ThreadMeta[] = readThreads();
+            const existing = idx.find((t: ThreadMeta) => t.id === sid);
+            const updated = existing
+              ? idx.map((t: ThreadMeta) => (t.id === sid ? { ...t, title, updatedAt: Date.now() } : t))
+              : [...idx, { id: sid, title, updatedAt: Date.now() }];
+            writeThreads(updated);
+          }
           return next;
         });
 
@@ -126,6 +188,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           setMessages((m) => {
             const next = [...m, statusMsg];
             if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
+            const sid = sessionIdRef.current;
+            if (sid) saveThreadMessages(sid, next);
             return next;
           });
           setTimeout(() => {
@@ -138,6 +202,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             setMessages((m) => {
               const next = [...m, done];
               if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
+              const sid = sessionIdRef.current;
+              if (sid) saveThreadMessages(sid, next);
               return next;
             });
           }, 5000);
@@ -166,6 +232,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setMessages((m) => {
       const next = [...m, msg];
       if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
+      const sid = sessionIdRef.current;
+      if (sid) {
+        saveThreadMessages(sid, next);
+        // Update thread meta title from first user message if available
+        const firstUser = next.find((mm) => mm.role === "user");
+        const title = firstUser?.content?.slice(0, 48) || "New chat";
+        const idx: ThreadMeta[] = readThreads();
+        const existing = idx.find((t: ThreadMeta) => t.id === sid);
+        const updated = existing
+          ? idx.map((t: ThreadMeta) => (t.id === sid ? { ...t, title, updatedAt: Date.now() } : t))
+          : [...idx, { id: sid, title, updatedAt: Date.now() }];
+        writeThreads(updated);
+      }
       return next;
     });
   }, []);
@@ -193,10 +272,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const sid = await createSessionId();
       setSessionId(sid);
       if (typeof window !== "undefined") localStorage.setItem("session_id", sid);
+      // Seed thread index
+      const idx: ThreadMeta[] = readThreads();
+      if (!idx.some((t: ThreadMeta) => t.id === sid)) {
+        writeThreads([{ id: sid, title: "New chat", updatedAt: Date.now() }, ...idx]);
+      }
+      saveThreadMessages(sid, []);
     } catch (e) {
       console.error("Failed to create new thread session", e);
     }
   }, []);
+
+  const openThread = useCallback((id: string) => {
+    setSessionId(id);
+    sessionIdRef.current = id;
+    const msgs = loadThreadMessages(id);
+    setMessages(msgs);
+    if (typeof window !== "undefined") localStorage.setItem("session_id", id);
+    if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(msgs));
+  }, [loadThreadMessages]);
 
   const setLang = useCallback((lang: string) => {
     setLanguage(lang);
@@ -210,13 +304,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       isTyping,
       language,
       backendUrl,
+      threads,
       sendMessage,
       addMessage,
       setLanguage: setLang,
       clearChat,
       newThread,
+      openThread,
     }),
-    [messages, sessionId, isConnected, isTyping, language, backendUrl, sendMessage, addMessage, setLang, clearChat, newThread]
+    [messages, sessionId, isConnected, isTyping, language, backendUrl, threads, sendMessage, addMessage, setLang, clearChat, newThread, openThread]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
