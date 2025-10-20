@@ -116,25 +116,12 @@ export function parseAssistantPayload(payload: unknown): ParsedMessage {
     return { kind: "image", content, data: { url: explicit["url"] }, metadata };
   }
 
-  // Allow backend to explicitly request a guided form rendering
-  if (explicitType === "add_inventory_form") {
-    return { kind: "add_inventory_form", content, metadata };
-  }
-  if (explicitType === "registration_form") {
-    return { kind: "registration_form", content, metadata };
-  }
+  // Do not auto-open guided forms based on backend types; forms are opened via UI actions only.
 
   const imageUrl = parseImageFromContent(content);
   if (imageUrl) return { kind: "image", content, data: { url: imageUrl }, metadata };
 
-  // Content-based fallbacks to trigger guided forms when the backend or parser
-  // cannot pass an explicit type (defensive UX)
-  if (/^let[’']s add your product\.?$/i.test(content.trim())) {
-    return { kind: "add_inventory_form", content, metadata };
-  }
-  if (/^let[’']s get you registered\.?$/i.test(content.trim())) {
-    return { kind: "registration_form", content, metadata };
-  }
+  // No content-based fallbacks for forms.
 
   const prices = parsePrices(content);
   if (prices) {

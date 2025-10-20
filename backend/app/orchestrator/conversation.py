@@ -161,7 +161,7 @@ class ConversationOrchestrator:
             await self.sessions.add_message(session_id, "assistant", msg)
             return {"type": "text", "content": msg, "metadata": {"intent": intent}}
         if intent == "add_inventory":
-            # If we have structured entities, call tool directly; otherwise fall back to LLM flow
+            # If we have structured entities, call tool directly; otherwise continue normal LLM flow
             required = ("product_name", "quantity_kg", "price_per_unit", "available_date")
             if all(k in entities for k in required):
                 args = {
@@ -178,11 +178,6 @@ class ConversationOrchestrator:
                 msg = tool_result.get("message", "")
                 await self.sessions.add_message(session_id, "assistant", msg)
                 return {"type": "text", "content": msg, "metadata": {"intent": intent}}
-            # Present guided form in the UI when details are incomplete
-            # This avoids back-and-forth for optional fields and standardizes input capture
-            open_form_msg = "Let’s add your product."
-            await self.sessions.add_message(session_id, "assistant", open_form_msg)
-            return {"type": "add_inventory_form", "content": open_form_msg, "metadata": {"intent": intent}}
         if intent == "check_customer_orders":
             tool_args: Dict[str, Any] = {}
             if entities.get("start_date") and entities.get("end_date"):

@@ -175,30 +175,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             writeThreads(updated);
           }
 
-          // If backend intends to start the Add Inventory flow, mirror the
-          // Quick Action behavior by injecting the guided form card.
-          let intent: string | undefined = undefined;
-          const meta = parsed?.metadata;
-          if (meta && typeof meta === "object") {
-            const rec = meta as Record<string, unknown>;
-            const v = rec["intent"];
-            if (typeof v === "string") intent = v;
-          }
-          const saysOpenForm = /^let[’']s add your product\.?$/i.test(String(parsed?.content || "").trim());
-          const shouldOpenInventoryForm =
-            parsed?.kind !== "add_inventory_form" && (intent === "add_inventory" || saysOpenForm);
-          if (shouldOpenInventoryForm) {
-            const formMsg: ChatMessage = {
-              role: "assistant",
-              content: "Let's add your product.",
-              timestamp: Date.now(),
-              kind: "add_inventory_form",
-            };
-            next = [...next, formMsg];
-            if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
-            const sid2 = sessionIdRef.current;
-            if (sid2) saveThreadMessages(sid2, next);
-          }
+          // Forms should only be opened from prebuilt buttons; do not inject forms based on backend intent/text.
           return next;
         });
 
