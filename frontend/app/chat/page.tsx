@@ -76,18 +76,27 @@ function ActionBridge({ children }: { children: React.ReactNode }) {
   const { sendMessage } = useChat();
   useEffect(() => {
     type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: ChatMsg };
+    type PriceData = { product?: string | null; rows?: unknown[]; recommended?: number | null };
+    const asPriceData = (m?: ChatMsg | null): PriceData | null => {
+      if (!m) return null;
+      if (m.kind !== "prices") return null;
+      const d = m.data;
+      return d && typeof d === "object" ? (d as PriceData) : null;
+    };
     const handler = (ev: Event) => {
       const e = ev as CustomEvent<ActionDetail>;
       const id = e?.detail?.id;
       const source = e?.detail?.message;
       if (!id) return;
       if (id === "use_recommended") {
-        const rec = source?.data?.recommended;
-        const product = source?.data?.product;
+        const d = asPriceData(source);
+        const rec = d?.recommended ?? null;
+        const product = d?.product ?? null;
         const txt = rec && product ? `Set ${product} price to ${rec} ETB/kg` : "Use recommended price";
         sendMessage(txt);
       } else if (id === "set_custom") {
-        const product = source?.data?.product;
+        const d = asPriceData(source);
+        const product = d?.product ?? "this product";
         sendMessage(`I want to set a custom price for ${product}`);
       } else if (id === "run_flash_sale") {
         sendMessage("Yes, run the suggested flash sale to clear expiring stock");

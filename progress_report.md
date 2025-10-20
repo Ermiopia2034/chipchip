@@ -199,6 +199,19 @@ How to Run:
 - Load: `docker compose exec -e LOAD_SESSIONS=10 -e LOAD_MSGS=10 backend pytest -q tests/load`
 - Data validation: `docker compose exec backend python scripts/validate_data.py`
 
+Date: 2025-10-20
+
+Task Completed: UI/UX Upgrade + Robust Product Normalization
+
+Summary of Changes (concise):
+- Chat UI: structured rendering for images, pricing suggestions, schedule, nudges, orders; Markdown support; Quick Actions bar.
+- Guided flows: conversational Registration and Add Inventory (one input per step) with in-chat cards.
+- UX polish: fixed full-viewport chat layout (no horizontal scroll), branded scrollbars, gradient/background textures, auto-scroll keeps typing visible.
+- Store: preserves full payload; COD confirmation shows 5s processing status before success.
+- Backend: fuzzy product auto-correction (no confirmation for clear matches) in add-inventory, pricing insights, and order creation; image gen uses canonical name.
+- Prompt: added strict entity normalization/spelling rules to system prompt.
+- Build: resolved ESLint/TS issues (removed any casts, typed custom events) and tightened types.
+
 Notes:
 - Tests that require external services are skipped if `GEMINI_API_KEY` is not set or if DB/Chroma are not reachable; with the current environment keys/data, they run against real services (no mocks).
 
