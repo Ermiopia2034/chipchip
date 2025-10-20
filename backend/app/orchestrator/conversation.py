@@ -73,6 +73,15 @@ class ConversationOrchestrator:
             return await self._handle_registration(session_id, session, intent, entities)
 
         # Deterministic tool routing for intents that map 1:1 to a tool
+        # Knowledge queries should always hit RAG directly to avoid LLM skipping the tool
+        if intent == "knowledge_query":
+            tool_args: Dict[str, Any] = {"query": user_message}
+            tool_result = await self.tools.rag_query_handler(tool_args, session_id=session_id)
+            msg = tool_result.get("message", "")
+            # Return grounded RAG result directly to avoid occasional LLM refusals
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+
         if intent == "check_stock":
             tool_result = await self.tools.check_supplier_stock_handler({}, session_id=session_id)
             msg = tool_result.get("message", "")

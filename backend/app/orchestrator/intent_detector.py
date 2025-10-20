@@ -154,6 +154,26 @@ class IntentDetector:
                 entities["end_date"] = end_date
             return {"intent": "check_customer_orders", "entities": entities}
 
+        # Knowledge/RAG heuristics: storage, nutrition, recipes, selection, seasonality (EN + basic Amharic cues)
+        knowledge_tokens_en = [
+            "store", "storage", "keep", "keep fresh", "refrigerate", "fridge", "ripe", "ripen",
+            "nutrition", "nutritional", "vitamin", "protein", "calories",
+            "recipe", "recipes", "cook", "cooking",
+            "selection", "choose", "pick",
+            "seasonality", "in season", "seasonal",
+            "how should i", "how do i", "best way to",
+        ]
+        knowledge_tokens_am = [
+            "ፍሪጅ",  # fridge
+            "ማከማቻ",  # storage
+            "እንዴት",   # how
+            "የምግብ ንጥረ ነገር",  # nutrition (broad)
+            "አብራሪ",  # recipe (approx)
+            "ወቅታዊ",  # seasonal
+        ]
+        if any(tok in lt for tok in knowledge_tokens_en) or any(tok in (text or "") for tok in knowledge_tokens_am):
+            return {"intent": "knowledge_query", "entities": entities}
+
         # 2) LLM-based detection (may be unavailable without network)
         prompt = (
             "You are an intent classifier for a horticulture marketplace chatbot.\n"
