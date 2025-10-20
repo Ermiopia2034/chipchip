@@ -138,13 +138,20 @@ class VectorDBService:
 
     def semantic_search(self, query: str, n_results: int = 3, category: str | None = None, product_name: str | None = None) -> dict:
         self._ensure_client()
+        # Build Chroma v0.5-style where filter. When combining multiple conditions,
+        # use a single top-level operator (e.g., $and) to satisfy the validator.
         where = None
-        if category or product_name:
-            where = {}
-            if category:
-                where["category"] = category
-            if product_name:
-                where["product_name"] = product_name
+        if category and product_name:
+            where = {
+                "$and": [
+                    {"category": {"$eq": category}},
+                    {"product_name": {"$eq": product_name}},
+                ]
+            }
+        elif category:
+            where = {"category": {"$eq": category}}
+        elif product_name:
+            where = {"product_name": {"$eq": product_name}}
         n = n_results or settings.RAG_TOP_K
         # Client-side embed to avoid server embedding
         emb = self._embed_texts([query])[0]
