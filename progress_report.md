@@ -240,3 +240,15 @@ How to Use:
 
 Next Steps:
 - Optional: enable TLS via certbot and update the host Nginx site for 443.
+
+Date: 2025-10-20
+
+Task Completed: Frontend UI Polish — Landing + Chat
+
+Summary of Changes:
+- Landing Page: Replaced default Next.js template with a branded, animated landing page featuring hero gradient, glassmorphism, and feature cards (frontend/app/page.tsx). Added subtle background gradients and grid depth (frontend/app/globals.css).
+- Chat Page: Restyled chat with a glass container, status header, and improved layout (frontend/app/chat/page.tsx). Enhanced message bubbles with avatars, gradients, and mount animations (frontend/components/ChatMessage.tsx). Upgraded input bar with pill style, send icon, and enter/shift+enter hints (frontend/components/ChatInput.tsx). Polished typing indicator and language selector (frontend/components/TypingIndicator.tsx, frontend/components/LanguageSelector.tsx).
+- Metadata: Updated site title/description (frontend/app/layout.tsx). No new dependencies added.
+
+Next Steps:
+- Optional enhancements: markdown rendering in assistant messages, scroll-to-bottom affordance, additional responsive tweaks, and theme toggle. Validate visuals across mobile/desktop.
