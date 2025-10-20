@@ -80,7 +80,26 @@ class ToolRegistry:
         name = (args.get("name") or "")
         location = (args.get("location") or "")
 
-        # Create user and update session
+        # If phone already exists, treat as login and update session
+        try:
+            existing = await self.db.get_user_by_phone(phone)
+        except Exception:
+            existing = None
+        if existing is not None:
+            # Optionally keep existing user_type; if caller supplied a different type, prefer existing
+            updates = {
+                "user_id": str(existing.user_id),
+                "user_type": existing.user_type or user_type_raw,
+                "registered": True,
+                "phone": existing.phone or phone,
+                "name": existing.name or (name or None),
+                "default_location": existing.default_location or (location or None),
+            }
+            await self.sessions.update_session(session_id, updates)
+            msg = "You're already registered. I've logged you in to this session."
+            return ToolResult.ok({"user_id": str(existing.user_id)}, msg)
+
+        # Create new user and update session
         user_id = await self.db.create_user(phone, name or None, user_type_raw, location or None)
         updates = {
             "user_id": user_id,
