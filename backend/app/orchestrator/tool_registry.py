@@ -35,6 +35,7 @@ class ToolRegistry:
         self.sessions = sessions or SessionManager()
 
         self._handlers = {
+            "register_user": self.register_user_handler,
             "search_products": self.search_products_handler,
             "get_pricing_insights": self.get_pricing_insights_handler,
             "rag_query": self.rag_query_handler,
@@ -61,6 +62,38 @@ class ToolRegistry:
         except Exception as e:
             logging.getLogger(__name__).exception("Tool '%s' failed: %s", name, e)
             return ToolResult.fail(f"{name} failed: {e}")
+
+    async def register_user_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
+        """Register the current session as a customer or supplier and persist details.
+
+        Required: user_type ("customer" | "supplier"), phone.
+        Optional: name, location.
+        """
+        if not session_id:
+            return ToolResult.fail("session_id is required")
+        user_type_raw = str(args.get("user_type", "")).strip().lower()
+        if user_type_raw not in {"customer", "supplier"}:
+            return ToolResult.fail("user_type must be 'customer' or 'supplier'")
+        phone = str(args.get("phone", "")).strip()
+        if not phone:
+            return ToolResult.fail("phone is required")
+        name = (args.get("name") or "")
+        location = (args.get("location") or "")
+
+        # Create user and update session
+        user_id = await self.db.create_user(phone, name or None, user_type_raw, location or None)
+        updates = {
+            "user_id": user_id,
+            "user_type": user_type_raw,
+            "registered": True,
+            "phone": phone,
+            "name": name or None,
+            "default_location": location or None,
+        }
+        await self.sessions.update_session(session_id, updates)
+
+        msg = f"Registration complete. Welcome {name or ''}! You are registered as a {user_type_raw}."
+        return ToolResult.ok({"user_id": user_id}, msg)
 
     # ---------------- Handlers (class methods) ----------------
     async def search_products_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:

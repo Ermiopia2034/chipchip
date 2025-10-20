@@ -6,7 +6,6 @@ import re
 from typing import Any, Dict, List, Optional
 
 from app.orchestrator.session_manager import SessionManager
-from app.orchestrator.intent_detector import IntentDetector
 from app.orchestrator.tool_registry import ToolRegistry
 from app.models.state_machine import StateMachine, States
 from app.services.llm_service import LLMService, _tool_declarations
@@ -16,12 +15,10 @@ from app.services.db_service import DatabaseService
 class ConversationOrchestrator:
     def __init__(self,
                  sessions: Optional[SessionManager] = None,
-                 detector: Optional[IntentDetector] = None,
                  tools: Optional[ToolRegistry] = None,
                  llm: Optional[LLMService] = None,
                  db: Optional[DatabaseService] = None) -> None:
         self.sessions = sessions or SessionManager()
-        self.detector = detector or IntentDetector()
         self.tools = tools or ToolRegistry()
         self.llm = llm or LLMService()
         self.db = db or DatabaseService()
@@ -40,6 +37,9 @@ class ConversationOrchestrator:
         # Build state machine from session context
         current_flow = (session.get("context") or {}).get("current_flow") or States.IDLE
         sm = StateMachine(current_flow)
+
+        # Directly route to the main LLM for intent discovery, tool calls, and response finalization.
+        return await self._llm_direct_flow(session_id, session, user_message)
 
         # 2a. If we're mid-registration and the user sent a phone number, fast-path registration
         if sm.state == States.REGISTERING:
@@ -234,7 +234,7 @@ class ConversationOrchestrator:
         if not phone:
             msg = "Please provide your phone number to complete registration."
             await self.sessions.add_message(session_id, "assistant", msg)
-            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+            return {"type": "text", "content": msg}
 
         # Create user in DB and update session
         user_id = await self.db.create_user(phone, name, user_type, location)
@@ -249,7 +249,7 @@ class ConversationOrchestrator:
         await self.sessions.update_session(session_id, updates)
         msg = f"Registration complete. Welcome {name or ''}! You are registered as a {user_type}."
         await self.sessions.add_message(session_id, "assistant", msg)
-        return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+        return {"type": "text", "content": msg}
 
     def _state_for_intent(self, intent: str) -> Optional[str]:
         mapping = {
@@ -291,6 +291,52 @@ class ConversationOrchestrator:
                 messages.append({"role": r, "content": content})
         messages.append({"role": "user", "content": user_message})
         return messages
+
+    async def _llm_direct_flow(self, session_id: str, session: Dict[str, Any], user_message: str) -> Dict[str, Any]:
+        logger = logging.getLogger(__name__)
+        tool_decls = _tool_declarations()
+        messages = self._build_messages(session, user_message)
+        last_tool_msg: str | None = None
+        max_calls = 3
+        for _ in range(max_calls):
+            result = self.llm.chat(messages, tools=tool_decls, allow_tools=True)
+            if result.get("type") == "tool_call":
+                name = result.get("name")
+                args = result.get("arguments") or {}
+                try:
+                    logger.info("EXEC tool=%s session=%s", name, session_id)
+                except Exception:
+                    pass
+                tool_result = await self.tools.execute(name, args, session_id=session_id)
+                # If this was the standalone image generation tool, return an explicit image payload for the UI
+                if name == "generate_product_image":
+                    try:
+                        data = tool_result.get("data") if isinstance(tool_result, dict) else None
+                        url = (data or {}).get("image_url") if isinstance(data, dict) else None
+                        if isinstance(url, str) and url:
+                            caption = tool_result.get("message", "")
+                            await self.sessions.add_message(session_id, "assistant", caption)
+                            return {"type": "image", "content": caption, "data": {"url": url}}
+                    except Exception:
+                        pass
+                last_tool_msg = tool_result.get("message", "")
+                context_block = (
+                    "Tool result (context):\n" + (last_tool_msg or "") + "\n\n"
+                    "Use this context to answer the user's last question concisely."
+                )
+                # Rebuild messages with the new context and continue loop
+                messages = self._build_messages(await self.sessions.get_session(session_id) or session, context_block)
+                continue
+            if result.get("type") == "text":
+                content = result.get("content", "")
+                await self.sessions.add_message(session_id, "assistant", content)
+                return {"type": "text", "content": content}
+        # Fallbacks
+        if last_tool_msg:
+            await self.sessions.add_message(session_id, "assistant", last_tool_msg)
+            return {"type": "text", "content": last_tool_msg}
+        await self.sessions.add_message(session_id, "assistant", "")
+        return {"type": "text", "content": ""}
 
 
 def _extract_phone(text: str) -> str | None:

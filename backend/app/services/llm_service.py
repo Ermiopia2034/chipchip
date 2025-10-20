@@ -24,6 +24,20 @@ def _tool_declarations() -> List[Dict[str, Any]]:
     # Gemini function declarations using Schema with type_ field and enum names
     fns = [
         {
+            "name": "register_user",
+            "description": "Register the current user (session) as a customer or supplier",
+            "parameters": _schema(
+                "OBJECT",
+                properties={
+                    "user_type": _schema("STRING"),
+                    "name": _schema("STRING"),
+                    "phone": _schema("STRING"),
+                    "location": _schema("STRING"),
+                },
+                required=["user_type", "phone"],
+            ),
+        },
+        {
             "name": "search_products",
             "description": "Search for products by name or category",
             "parameters": _schema(
