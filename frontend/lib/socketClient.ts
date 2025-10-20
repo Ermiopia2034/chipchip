@@ -10,20 +10,19 @@ function getBackendUrl(): string {
   return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8005";
 }
 
-export type SocketClient = Socket<
-  // Server-to-client events
-  {
-    response: (payload: any) => void;
-    typing: (payload: { isTyping: boolean }) => void;
-    session: (payload: { sessionId: string }) => void;
-    app_error: (payload: { message: string }) => void;
-  },
-  // Client-to-server events
-  {
-    message: (payload: { sessionId?: string; text: string }) => void;
-    typing: (payload: { isTyping: boolean }) => void;
-  }
->;
+export type ServerToClientEvents = {
+  response: (payload: { content?: string; message?: string }) => void;
+  typing: (payload: { isTyping: boolean }) => void;
+  session: (payload: { sessionId: string }) => void;
+  app_error: (payload: { message: string }) => void;
+};
+
+export type ClientToServerEvents = {
+  message: (payload: { sessionId?: string; text: string }) => void;
+  typing: (payload: { isTyping: boolean }) => void;
+};
+
+export type SocketClient = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 export function createSocket(): SocketClient {
   const socket: SocketClient = io(getBackendUrl(), {

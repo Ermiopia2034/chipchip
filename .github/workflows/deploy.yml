@@ -11,6 +11,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check required secrets
+        run: |
+          [ -n "${{ secrets.VPS_HOST }}" ] || { echo "::error::VPS_HOST secret missing"; exit 1; }
+          [ -n "${{ secrets.VPS_USER }}" ] || { echo "::error::VPS_USER secret missing"; exit 1; }
+          [ -n "${{ secrets.VPS_SSH_KEY }}" ] || { echo "::error::VPS_SSH_KEY secret missing"; exit 1; }
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:

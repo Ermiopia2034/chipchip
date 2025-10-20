@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { createSessionId, createSocket, SocketClient } from "./socketClient";
+import { createSessionId, createSocket, SocketClient, ServerToClientEvents, ClientToServerEvents } from "./socketClient";
 
 export type ChatMessage = {
   role: "user" | "assistant";
@@ -38,6 +38,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   });
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8005";
   const socketRef = useRef<SocketClient | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  // Keep a live ref of sessionId for event handlers without re-creating effects
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   // Persist and restore session + history
   useEffect(() => {
@@ -80,12 +86,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     socket.on("disconnect", () => setIsConnected(false));
     socket.on("typing", (p) => setIsTyping(!!p?.isTyping));
     socket.on("session", (p) => {
-      if (p?.sessionId && !sessionId) {
+      if (p?.sessionId && !sessionIdRef.current) {
         setSessionId(p.sessionId);
         if (typeof window !== "undefined") localStorage.setItem("session_id", p.sessionId);
       }
     });
-    socket.on("response", (payload: any) => {
+    socket.on("response", (payload: Parameters<ServerToClientEvents["response"]>[0]) => {
       const content = payload?.content ?? payload?.message ?? "";
       if (content) {
         const msg: ChatMessage = { role: "assistant", content, timestamp: Date.now() };
@@ -100,10 +106,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       console.error("Server error", p?.message || p);
     });
     // Also surface transport / connect errors for visibility
-    socket.io.on("error", (err: any) => {
+    socket.io.on("error", (err: Error) => {
       console.error("Transport error", err);
     });
-    socket.io.on("reconnect_error", (err: any) => {
+    socket.io.on("reconnect_error", (err: Error) => {
       console.error("Reconnect error", err);
     });
 
@@ -126,7 +132,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (!text?.trim()) return;
     const msg: ChatMessage = { role: "user", content: text, timestamp: Date.now() };
     addMessage(msg);
-    const payload: any = { text };
+    const payload: Parameters<ClientToServerEvents["message"]>[0] = { text };
     if (sessionId) payload.sessionId = sessionId;
     socketRef.current?.emit("message", payload);
   }, [addMessage, sessionId]);

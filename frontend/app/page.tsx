@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageSquare, Sprout, Globe2, Sparkles, Leaf, TrendingUp } from "lucide-react";
+import { MessageSquare, Sprout, Globe2, Sparkles, TrendingUp } from "lucide-react";
 
 export default function Home() {
   return (
