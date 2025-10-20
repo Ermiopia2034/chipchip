@@ -134,11 +134,49 @@ class ToolRegistry:
 
     async def rag_query_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
         query = str(args.get("query", "")).strip()
-        category = args.get("category")
+        category = (args.get("category") or "").strip() or None
+        product_name_arg = (args.get("product_name") or "").strip() or None
         if not query:
             return ToolResult.fail("query is required")
 
-        result = self.rag.semantic_search(query, n_results=3, category=category)
+        # Heuristic category detection from query if not provided
+        ql = query.lower()
+        if not category:
+            if any(t in ql for t in ["store", "storage", "keep", "refrigerate", "fridge", "ripe", "ripen"]):
+                category = "storage"
+            elif any(t in ql for t in ["nutrition", "nutritional", "vitamin", "calories", "protein"]):
+                category = "nutrition"
+            elif any(t in ql for t in ["recipe", "recipes", "cook", "cooking"]):
+                category = "recipes"
+            elif any(t in ql for t in ["select", "selection", "choose", "pick"]):
+                category = "selection"
+            elif any(t in ql for t in ["season", "seasonality", "in season"]):
+                category = "seasonality"
+
+        # Try to infer product name from query if not provided
+        product_name: Optional[str] = product_name_arg
+        if not product_name:
+            try:
+                all_products = await self.db.get_all_products()
+                for p in all_products:
+                    pn = (p.product_name or "").strip()
+                    if not pn:
+                        continue
+                    if pn.lower() in ql:
+                        product_name = pn
+                        break
+                # Fuzzy fallback if no direct substring match
+                if not product_name:
+                    maybe, score = await self.db.fuzzy_get_product_by_name(query, threshold=0.8)
+                    if maybe is not None:
+                        product_name = maybe.product_name
+            except Exception:
+                # If DB not reachable, continue without a product filter
+                pass
+
+        # Narrow results: if we have a specific category or product, reduce n_results
+        n_results = 1 if category in {"storage", "nutrition", "selection", "seasonality"} and product_name else 3
+        result = self.rag.semantic_search(query, n_results=n_results, category=category, product_name=product_name)
         documents = result.get("documents") or []
         metadatas = result.get("metadatas") or []
         scores = result.get("distances") or result.get("scores") or []
@@ -149,6 +187,21 @@ class ToolRegistry:
 
         if not docs:
             return ToolResult.ok([], "I don't have specific information about that. Let me help you with something else.")
+
+        # Prefer concise single answer when focused filters are present
+        if product_name and category and docs:
+            primary = docs[0]
+            msg = primary
+            # If the KB content is in the form "<Product> <category>: <content>", strip the prefix for brevity
+            try:
+                parts = primary.split(":", 1)
+                if len(parts) == 2 and product_name.lower() in parts[0].lower():
+                    msg = parts[1].strip()
+            except Exception:
+                pass
+            return ToolResult.ok([
+                {"content": docs[0], "metadata": metas[0] if metas else {}, "score": scs[0] if scs else None}
+            ], msg)
 
         lines = []
         for i, d in enumerate(docs):

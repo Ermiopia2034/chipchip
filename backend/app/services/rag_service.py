@@ -136,20 +136,26 @@ class VectorDBService:
         self.collection.add(documents=documents, metadatas=metadatas, ids=ids, embeddings=embeddings)
         return len(ids)
 
-    def semantic_search(self, query: str, n_results: int = 3, category: str | None = None) -> dict:
+    def semantic_search(self, query: str, n_results: int = 3, category: str | None = None, product_name: str | None = None) -> dict:
         self._ensure_client()
-        where = {"category": category} if category else None
+        where = None
+        if category or product_name:
+            where = {}
+            if category:
+                where["category"] = category
+            if product_name:
+                where["product_name"] = product_name
         n = n_results or settings.RAG_TOP_K
         # Client-side embed to avoid server embedding
         emb = self._embed_texts([query])[0]
         result = self.collection.query(query_embeddings=[emb], n_results=n, where=where)  # type: ignore
         return result
 
-    async def async_semantic_search(self, query: str, n_results: int | None = None, category: str | None = None) -> dict:
+    async def async_semantic_search(self, query: str, n_results: int | None = None, category: str | None = None, product_name: str | None = None) -> dict:
         # Simple thread offload for compatibility with async call sites
         import asyncio
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            None, lambda: self.semantic_search(query, n_results or settings.RAG_TOP_K, category)
+            None, lambda: self.semantic_search(query, n_results or settings.RAG_TOP_K, category, product_name)
         )
