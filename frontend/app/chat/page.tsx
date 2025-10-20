@@ -7,6 +7,7 @@ import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import QuickActionsBar from "@/components/QuickActionsBar";
 import Link from "next/link";
+import type { ChatMessage as ChatMsg } from "@/lib/chatStore";
 
 function ChatView() {
   const { messages, isTyping, isConnected, sessionId } = useChat();
@@ -38,13 +39,13 @@ function ChatView() {
   ), [isConnected, sessionId]);
 
   return (
-    <div className="relative min-h-screen px-2 sm:px-6 py-4">
+    <div className="fixed inset-0 px-2 sm:px-6 py-4 overflow-hidden">
       {/* Decorative gradients for chat page */}
       <div className="pointer-events-none absolute -top-24 -left-24 h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--brand)/0.18)_0%,transparent_60%)] float-slow" />
       <div className="pointer-events-none absolute -bottom-24 -right-24 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--brand-2)/0.18)_0%,transparent_60%)] float-slow float-delay" />
-      <div className="mx-auto w-full max-w-3xl rounded-2xl glass border border-black/10 dark:border-white/10 shadow-lg">
+      <div className="mx-auto w-full max-w-3xl h-full rounded-2xl glass border border-black/10 dark:border-white/10 shadow-lg flex flex-col overflow-hidden">
         {header}
-        <div ref={listRef} className="flex-1 overflow-y-auto py-4 px-3 sm:px-4 bg-grid chat-scroll pretty-scroll" style={{ maxHeight: "calc(100dvh - 200px)" }}>
+        <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto py-4 px-3 sm:px-4 bg-grid chat-scroll pretty-scroll">
           {messages.map((m, i) => (
             <ChatMessage key={i} message={m} />
           ))}
@@ -74,8 +75,10 @@ export default function ChatPage() {
 function ActionBridge({ children }: { children: React.ReactNode }) {
   const { sendMessage } = useChat();
   useEffect(() => {
-    const handler = (e: any) => {
-      const id = e?.detail?.id as string | undefined;
+    type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: ChatMsg };
+    const handler = (ev: Event) => {
+      const e = ev as CustomEvent<ActionDetail>;
+      const id = e?.detail?.id;
       const source = e?.detail?.message;
       if (!id) return;
       if (id === "use_recommended") {

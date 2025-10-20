@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useChat, type ChatMessage } from "@/lib/chatStore";
+import type { ParsedKind } from "@/lib/messageParser";
 
 const actions = [
   { label: "Register me", text: "I want to register" },
@@ -26,7 +27,7 @@ export default function QuickActionsBar() {
               const msg: ChatMessage = {
                 role: "assistant",
                 content: "Let’s get you registered.",
-                kind: "registration_form" as any,
+                kind: "registration_form" as ParsedKind,
                 timestamp: Date.now(),
               };
               addMessage(msg);
@@ -34,7 +35,7 @@ export default function QuickActionsBar() {
               const msg: ChatMessage = {
                 role: "assistant",
                 content: "Let’s add your product.",
-                kind: "add_inventory_form" as any,
+                kind: "add_inventory_form" as ParsedKind,
                 timestamp: Date.now(),
               };
               addMessage(msg);

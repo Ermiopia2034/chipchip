@@ -21,7 +21,7 @@ export default function ProductAdditionCard() {
     if (step === 4) return true; // expiry optional
     if (step === 5) return genImg !== null; // require explicit choice
     return true;
-  }, [step, product, qty, price, available, expiry, genImg]);
+  }, [step, product, qty, price, available, genImg]);
 
   const onConfirm = () => {
     const parts = [

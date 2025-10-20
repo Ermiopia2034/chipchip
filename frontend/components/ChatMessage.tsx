@@ -55,7 +55,8 @@ export default function ChatMessage({ message }: { message: Msg }) {
                     recommended={message.data?.recommended ?? null}
                     onAction={(id) => {
                       // Send a natural language follow-up via event bubbling; the store is not directly available here.
-                      const evt = new CustomEvent("cc-action", { detail: { id, message } });
+                      type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: Msg };
+                      const evt = new CustomEvent<ActionDetail>("cc-action", { detail: { id: id as ActionDetail["id"], message } });
                       window.dispatchEvent(evt);
                     }}
                   />
@@ -71,7 +72,8 @@ export default function ChatMessage({ message }: { message: Msg }) {
                     title={message.data?.title || "Suggestion"}
                     suggestions={message.data?.suggestions || []}
                     onAction={(id) => {
-                      const evt = new CustomEvent("cc-action", { detail: { id, message } });
+                      type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: Msg };
+                      const evt = new CustomEvent<ActionDetail>("cc-action", { detail: { id: id as ActionDetail["id"], message } });
                       window.dispatchEvent(evt);
                     }}
                   />
@@ -93,18 +95,28 @@ export default function ChatMessage({ message }: { message: Msg }) {
               return (
                 <div className="space-y-2">
                   {/* Map parsed data into existing OrderCard shape loosely */}
-                  <OrderCard
-                    order={{
-                      items: (message.data?.items || []).map((it: any) => ({
-                        product_name: it.label || it.product_name,
-                        quantity_kg: it.quantity_kg || 0,
-                        price_per_unit: it.price_per_unit || 0,
-                      })),
-                      total: message.data?.total || 0,
-                      delivery_date: message.data?.delivery || "",
-                      delivery_location: (message.data?.delivery || "").split(" to ")[1] || "",
-                    }}
-                  />
+                  {(() => {
+                    type OrderItemLike = { label?: string; product_name?: string; quantity_kg?: number; price_per_unit?: number };
+                    const d = (message.data as { items?: unknown; total?: unknown; delivery?: unknown }) || {};
+                    const items = Array.isArray(d.items) ? (d.items as OrderItemLike[]) : [];
+                    const total = typeof d.total === "number" ? d.total : 0;
+                    const delivery = typeof d.delivery === "string" ? d.delivery : "";
+                    const delivery_location = delivery.includes(" to ") ? delivery.split(" to ")[1] : "";
+                    return (
+                      <OrderCard
+                        order={{
+                          items: items.map((it) => ({
+                            product_name: it.label || it.product_name,
+                            quantity_kg: it.quantity_kg || 0,
+                            price_per_unit: it.price_per_unit || 0,
+                          })),
+                          total,
+                          delivery_date: delivery,
+                          delivery_location,
+                        }}
+                      />
+                    );
+                  })()}
                   <div className="text-[10px] mt-1 opacity-70 text-gray-500">
                     {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </div>

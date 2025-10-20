@@ -14,9 +14,9 @@ export type ParsedKind =
 export type ParsedMessage = {
   kind: ParsedKind;
   content: string;
-  data?: any;
+  data?: unknown;
   actions?: { id: string; label: string }[];
-  metadata?: any;
+  metadata?: unknown;
 };
 
 function parseImageFromContent(content: string): string | null {
@@ -103,16 +103,17 @@ function parseGenericList(content: string) {
   return { lines };
 }
 
-export function parseAssistantPayload(payload: any): ParsedMessage {
-  const content = String(payload?.content ?? payload?.message ?? "");
+export function parseAssistantPayload(payload: unknown): ParsedMessage {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  const content = String((p["content"] as string | undefined) ?? (p["message"] as string | undefined) ?? "");
 
   // If backend ever adds a type/data, keep them
-  const explicitType = payload?.type as string | undefined;
-  const explicit = payload?.data;
-  const metadata = payload?.metadata;
+  const explicitType = typeof p["type"] === "string" ? (p["type"] as string) : undefined;
+  const explicit = (p["data"] ?? {}) as Record<string, unknown>;
+  const metadata = p["metadata"];
 
-  if (explicitType === "image" && explicit?.url) {
-    return { kind: "image", content, data: { url: explicit.url }, metadata };
+  if (explicitType === "image" && typeof explicit["url"] === "string") {
+    return { kind: "image", content, data: { url: explicit["url"] }, metadata };
   }
 
   const imageUrl = parseImageFromContent(content);

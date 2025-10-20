@@ -9,10 +9,10 @@ export type ChatMessage = {
   content: string;
   timestamp: number;
   kind?: ParsedKind;
-  data?: any;
+  data?: unknown;
   actions?: { id: string; label: string }[];
-  metadata?: any;
-  raw?: any;
+  metadata?: unknown;
+  raw?: unknown;
 };
 
 type ChatState = {
