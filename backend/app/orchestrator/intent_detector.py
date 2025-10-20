@@ -69,11 +69,29 @@ class IntentDetector:
         ):
             # Extract fields
             qty_m = re.search(r"(\d+(?:\.\d+)?)\s*kg", t, flags=re.IGNORECASE)
-            price_m = re.search(r"at\s*([0-9]+(?:\.[0-9]+)?)\s*etb(?:/kg)?", t, flags=re.IGNORECASE)
-            # Product name commonly appears as "kg of <name>" before price
-            pname_m = re.search(r"kg\s+of\s+([A-Za-z\u1200-\u137F'\- ]+?)\s*(?:at|,|\.|$)", t, flags=re.IGNORECASE)
-            avail_m = re.search(r"available\s*date\s*:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", t, flags=re.IGNORECASE)
-            exp_m = re.search(r"expiry\s*date\s*:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", t, flags=re.IGNORECASE)
+            # Accept both "at 98 ETB/kg" and "98 ETB/kg" (or "98 ETB per kg")
+            price_m = re.search(r"(?:at\s*)?([0-9]+(?:\.[0-9]+)?)\s*etb(?:\s*/\s*kg|\s*per\s*kg)?", t, flags=re.IGNORECASE)
+            # Product name patterns:
+            # 1) "kg of <name>" (existing)
+            pname = None
+            _p1 = re.search(r"kg\s+of\s+([A-Za-z\u1200-\u137F'\- ]+?)\s*(?:at|,|\.|$)", t, flags=re.IGNORECASE)
+            if _p1:
+                pname = _p1.group(1).strip()
+            else:
+                # 2) After "add inventory, <name>, <qty> kg" (matches the UI-composed string)
+                _p2 = re.search(r"add\s+inventory[^,]*,\s*([A-Za-z\u1200-\u137F'\- ]+?)\s*,", t, flags=re.IGNORECASE)
+                if _p2:
+                    pname = _p2.group(1).strip()
+                else:
+                    # 3) Generic: "..., <name>, 75 kg, ..."
+                    _p3 = re.search(r",\s*([A-Za-z\u1200-\u137F'\- ]+?)\s*,\s*\d+(?:\.\d+)?\s*kg", t, flags=re.IGNORECASE)
+                    if _p3:
+                        pname = _p3.group(1).strip()
+
+            # Accept both "available date: 2025-..." and "available 2025-..."
+            avail_m = re.search(r"available\s*(?:date)?\s*:?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", t, flags=re.IGNORECASE)
+            # Accept both "expiry date: 2025-..." and "expiry 2025-..."
+            exp_m = re.search(r"expiry\s*(?:date)?\s*:?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", t, flags=re.IGNORECASE)
             gen_true = re.search(r"generate\s+(an\s+)?image", lt) is not None and not re.search(
                 r"do\s+not\s+generate", lt
             )
@@ -81,8 +99,8 @@ class IntentDetector:
                 entities["quantity_kg"] = float(qty_m.group(1))
             if price_m:
                 entities["price_per_unit"] = float(price_m.group(1))
-            if pname_m:
-                entities["product_name"] = pname_m.group(1).strip()
+            if pname:
+                entities["product_name"] = pname
             if avail_m:
                 entities["available_date"] = avail_m.group(1)
             if exp_m:
