@@ -159,7 +159,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           raw: payload,
         };
         setMessages((m) => {
-          let next = [...m, msg];
+          const next = [...m, msg];
           if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
           const sid = sessionIdRef.current;
           if (sid) {
@@ -263,7 +263,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const clearChat = useCallback(() => {
     setMessages([]);
     if (typeof window !== "undefined") localStorage.removeItem("chat_history");
-  }, [readThreads, writeThreads, saveThreadMessages]);
+  }, []);
 
   const newThread = useCallback(async () => {
     // Clear local conversation
@@ -283,7 +283,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error("Failed to create new thread session", e);
     }
-  }, []);
+  }, [readThreads, writeThreads, saveThreadMessages]);
 
   const openThread = useCallback((id: string) => {
     setSessionId(id);
