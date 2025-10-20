@@ -10,7 +10,7 @@ import Link from "next/link";
 import type { ChatMessage as ChatMsg } from "@/lib/chatStore";
 
 function ChatView() {
-  const { messages, isTyping, isConnected, sessionId } = useChat();
+  const { messages, isTyping, isConnected, sessionId, newThread } = useChat();
   const listRef = useRef<HTMLDivElement>(null);
 
   // Auto scroll to bottom on new message
@@ -34,9 +34,17 @@ function ChatView() {
           </div>
         </div>
       </div>
-      {/* Language selector removed per requirements */}
+      <div>
+        <button
+          type="button"
+          onClick={() => newThread()}
+          className="rounded-xl border border-black/10 dark:border-white/15 bg-white/60 dark:bg-white/5 px-3 py-1.5 text-xs hover:bg-white/80 transition-colors"
+        >
+          New Chat
+        </button>
+      </div>
     </div>
-  ), [isConnected, sessionId]);
+  ), [isConnected, sessionId, newThread]);
 
   return (
     <div className="fixed inset-0 px-2 sm:px-6 py-4 overflow-hidden">

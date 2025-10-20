@@ -29,6 +29,7 @@ type ChatActions = {
   addMessage: (msg: ChatMessage) => void;
   setLanguage: (lang: string) => void;
   clearChat: () => void;
+  newThread: () => Promise<void>;
 };
 
 const ChatContext = createContext<(ChatState & ChatActions) | null>(null);
@@ -183,6 +184,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") localStorage.removeItem("chat_history");
   }, []);
 
+  const newThread = useCallback(async () => {
+    // Clear local conversation
+    setMessages([]);
+    if (typeof window !== "undefined") localStorage.removeItem("chat_history");
+    try {
+      // Request a fresh backend session id and persist it
+      const sid = await createSessionId();
+      setSessionId(sid);
+      if (typeof window !== "undefined") localStorage.setItem("session_id", sid);
+    } catch (e) {
+      console.error("Failed to create new thread session", e);
+    }
+  }, []);
+
   const setLang = useCallback((lang: string) => {
     setLanguage(lang);
   }, []);
@@ -199,8 +214,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       addMessage,
       setLanguage: setLang,
       clearChat,
+      newThread,
     }),
-    [messages, sessionId, isConnected, isTyping, language, backendUrl, sendMessage, addMessage, setLang, clearChat]
+    [messages, sessionId, isConnected, isTyping, language, backendUrl, sendMessage, addMessage, setLang, clearChat, newThread]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
