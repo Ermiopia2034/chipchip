@@ -279,6 +279,8 @@ class ConversationOrchestrator:
             f"USER CONTEXT: user_type={user_type}, registered={registered}, name={name}\n"
             f"CURRENT STATE: {context_summary}\n"
             "Use available tools if needed. Keep responses concise.\n"
+            "Date/time handling: Never ask the user for start/end dates. Resolve phrases like 'today', 'tomorrow', 'this week', 'next week' yourself using the get_current_time tool, and then call schedule/order tools with derived ISO dates. For supplier schedules, you may also call get_supplier_schedule without dates (defaults to current Mon–Sun).\n"
+            "Expiry checks (suppliers): If asked about expiring items (e.g., 'in the next 3 days'), call suggest_flash_sale with days_threshold (default 3).\n"
         )
         history = session.get("conversation_history") or []
         messages: List[Dict[str, str]] = [{"role": "user", "content": preface}]

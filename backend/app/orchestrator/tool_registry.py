@@ -35,6 +35,7 @@ class ToolRegistry:
         self.sessions = sessions or SessionManager()
 
         self._handlers = {
+            "get_current_time": self.get_current_time_handler,
             "register_user": self.register_user_handler,
             "search_products": self.search_products_handler,
             "get_pricing_insights": self.get_pricing_insights_handler,
@@ -62,6 +63,27 @@ class ToolRegistry:
         except Exception as e:
             logging.getLogger(__name__).exception("Tool '%s' failed: %s", name, e)
             return ToolResult.fail(f"{name} failed: {e}")
+
+    async def get_current_time_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
+        import datetime as dt
+        now = dt.datetime.now()
+        today = now.date()
+        # Week starts Monday
+        mon = today - dt.timedelta(days=today.weekday())
+        sun = mon + dt.timedelta(days=6)
+        nxt_mon = mon + dt.timedelta(days=7)
+        nxt_sun = nxt_mon + dt.timedelta(days=6)
+        data = {
+            "now_iso": now.isoformat(),
+            "today": today.isoformat(),
+            "current_week": {"start_date": mon.isoformat(), "end_date": sun.isoformat()},
+            "next_week": {"start_date": nxt_mon.isoformat(), "end_date": nxt_sun.isoformat()},
+        }
+        msg = (
+            f"Today is {today.isoformat()}. Current week: {mon.isoformat()} to {sun.isoformat()}. "
+            f"Next week: {nxt_mon.isoformat()} to {nxt_sun.isoformat()}."
+        )
+        return ToolResult.ok(data, msg)
 
     async def register_user_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
         """Register the current session as a customer or supplier and persist details.

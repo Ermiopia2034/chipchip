@@ -24,6 +24,14 @@ def _tool_declarations() -> List[Dict[str, Any]]:
     # Gemini function declarations using Schema with type_ field and enum names
     fns = [
         {
+            "name": "get_current_time",
+            "description": (
+                "Return the current date/time and week boundaries. "
+                "Use this to resolve phrases like 'today', 'tomorrow', 'this week', 'next week' without asking the user."
+            ),
+            "parameters": _schema("OBJECT", properties={}),
+        },
+        {
             "name": "register_user",
             "description": "Register the current user (session) as a customer or supplier",
             "parameters": _schema(
@@ -121,7 +129,10 @@ def _tool_declarations() -> List[Dict[str, Any]]:
         },
         {
             "name": "get_supplier_schedule",
-            "description": "View supplier's delivery schedule",
+            "description": (
+                "View supplier's delivery schedule. If start_date and end_date are omitted, defaults to the current week (Mon–Sun). "
+                "Do NOT ask the user for date ranges; compute them yourself (e.g., use get_current_time)."
+            ),
             "parameters": _schema(
                 "OBJECT",
                 properties={
@@ -132,8 +143,15 @@ def _tool_declarations() -> List[Dict[str, Any]]:
         },
         {
             "name": "suggest_flash_sale",
-            "description": "Check for expiring inventory and suggest discounts",
-            "parameters": _schema("OBJECT", properties={}),
+            "description": (
+                "For suppliers: check expiring inventory and suggest discount actions for items that expire soon."
+            ),
+            "parameters": _schema(
+                "OBJECT",
+                properties={
+                    "days_threshold": _schema("NUMBER"),
+                },
+            ),
         },
         {
             "name": "get_customer_orders",
