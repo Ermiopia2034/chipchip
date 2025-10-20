@@ -159,7 +159,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           raw: payload,
         };
         setMessages((m) => {
-          const next = [...m, msg];
+          let next = [...m, msg];
           if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
           const sid = sessionIdRef.current;
           if (sid) {
@@ -173,6 +173,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
               ? idx.map((t: ThreadMeta) => (t.id === sid ? { ...t, title, updatedAt: Date.now() } : t))
               : [...idx, { id: sid, title, updatedAt: Date.now() }];
             writeThreads(updated);
+          }
+
+          // If backend intends to start the Add Inventory flow, mirror the
+          // Quick Action behavior by injecting the guided form card.
+          const intent = (parsed?.metadata as any)?.intent;
+          const saysOpenForm = /^let[’']s add your product\.?$/i.test(String(parsed?.content || "").trim());
+          const shouldOpenInventoryForm =
+            parsed?.kind !== "add_inventory_form" && (intent === "add_inventory" || saysOpenForm);
+          if (shouldOpenInventoryForm) {
+            const formMsg: ChatMessage = {
+              role: "assistant",
+              content: "Let's add your product.",
+              timestamp: Date.now(),
+              kind: "add_inventory_form",
+            };
+            next = [...next, formMsg];
+            if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
+            const sid2 = sessionIdRef.current;
+            if (sid2) saveThreadMessages(sid2, next);
           }
           return next;
         });
