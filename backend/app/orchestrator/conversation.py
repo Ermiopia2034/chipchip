@@ -1,0 +1,236 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+from typing import Any, Dict, List, Optional
+
+from app.orchestrator.session_manager import SessionManager
+from app.orchestrator.intent_detector import IntentDetector
+from app.orchestrator.tool_registry import ToolRegistry
+from app.models.state_machine import StateMachine, States
+from app.services.llm_service import LLMService, _tool_declarations
+from app.services.db_service import DatabaseService
+
+
+class ConversationOrchestrator:
+    def __init__(self,
+                 sessions: Optional[SessionManager] = None,
+                 detector: Optional[IntentDetector] = None,
+                 tools: Optional[ToolRegistry] = None,
+                 llm: Optional[LLMService] = None,
+                 db: Optional[DatabaseService] = None) -> None:
+        self.sessions = sessions or SessionManager()
+        self.detector = detector or IntentDetector()
+        self.tools = tools or ToolRegistry()
+        self.llm = llm or LLMService()
+        self.db = db or DatabaseService()
+
+    async def process_message(self, session_id: str, user_message: str) -> Dict[str, Any]:
+        logger = logging.getLogger(__name__)
+        # 1. Load session + history
+        session = await self.sessions.get_session(session_id)
+        if not session:
+            # Create if missing
+            await self.sessions.create_session()
+            session = await self.sessions.get_session(session_id)
+
+        await self.sessions.add_message(session_id, "user", user_message)
+
+        # Build state machine from session context
+        current_flow = (session.get("context") or {}).get("current_flow") or States.IDLE
+        sm = StateMachine(current_flow)
+
+        # 2a. If we're mid-registration and the user sent a phone number, fast-path registration
+        if sm.state == States.REGISTERING:
+            phone = _extract_phone(user_message)
+            if phone:
+                last_intent = (session.get("context") or {}).get("last_intent") or "registration_customer"
+                entities = {"phone": phone}
+                return await self._handle_registration(session_id, session, last_intent, entities)
+
+        # 2b. Detect intent (LLM with light heuristics)
+        intent_res = self.detector.detect(user_message)
+        intent = intent_res.get("intent") or "general_chat"
+        entities = intent_res.get("entities") or {}
+        try:
+            logger.info("MSG session=%s intent=%s text_len=%d", session_id, intent, len(user_message))
+        except Exception:
+            pass
+
+        # Update flow based on intent
+        next_state = self._state_for_intent(intent)
+        if next_state and sm.can_transition(next_state):
+            sm.transition(next_state)
+        # Save state
+        context = session.get("context") or {}
+        context["current_flow"] = sm.state
+        context["last_intent"] = intent
+        await self.sessions.update_session(session_id, {"context": context})
+
+        # Handle special flows that are orchestrator-level (registration)
+        if intent in ("registration_customer", "registration_supplier"):
+            return await self._handle_registration(session_id, session, intent, entities)
+
+        # Deterministic tool routing for intents that map 1:1 to a tool
+        if intent == "check_stock":
+            tool_result = await self.tools.check_supplier_stock_handler({}, session_id=session_id)
+            msg = tool_result.get("message", "")
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+        if intent == "check_schedule":
+            # Optional: accept date range via entities in future. Use defaults now.
+            tool_args: Dict[str, Any] = {}
+            # If intent detector provided dates, pass them
+            if entities.get("start_date") and entities.get("end_date"):
+                tool_args = {"start_date": entities.get("start_date"), "end_date": entities.get("end_date")}
+            tool_result = await self.tools.get_supplier_schedule_handler(tool_args, session_id=session_id)
+            msg = tool_result.get("message", "")
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+        if intent == "flash_sale_check":
+            # Pass days_threshold if the user specified a window
+            tool_args: Dict[str, Any] = {}
+            if entities.get("days"):
+                tool_args["days_threshold"] = int(entities["days"])  # type: ignore[arg-type]
+            tool_result = await self.tools.suggest_flash_sale_handler(tool_args, session_id=session_id)
+            msg = tool_result.get("message", "")
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+        if intent == "add_inventory":
+            # If we have structured entities, call tool directly; otherwise fall back to LLM flow
+            required = ("product_name", "quantity_kg", "price_per_unit", "available_date")
+            if all(k in entities for k in required):
+                args = {
+                    "product_name": entities.get("product_name"),
+                    "quantity_kg": entities.get("quantity_kg"),
+                    "price_per_unit": entities.get("price_per_unit"),
+                    "available_date": entities.get("available_date"),
+                }
+                if entities.get("expiry_date"):
+                    args["expiry_date"] = entities.get("expiry_date")
+                if "generate_image" in entities:
+                    args["generate_image"] = bool(entities.get("generate_image"))
+                tool_result = await self.tools.add_inventory_handler(args, session_id=session_id)
+                msg = tool_result.get("message", "")
+                await self.sessions.add_message(session_id, "assistant", msg)
+                return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+        if intent == "check_customer_orders":
+            tool_args: Dict[str, Any] = {}
+            if entities.get("start_date") and entities.get("end_date"):
+                tool_args["start_date"] = entities["start_date"]
+                tool_args["end_date"] = entities["end_date"]
+            if entities.get("status"):
+                tool_args["status"] = entities["status"]
+            tool_result = await self.tools.get_customer_orders_handler(tool_args, session_id=session_id)
+            msg = tool_result.get("message", "")
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+
+        # 4. Build LLM context and tool declarations
+        tool_decls = _tool_declarations()
+        messages = self._build_messages(session, user_message)
+
+        # 5. Call LLM + function-calling loop
+        result = self.llm.chat(messages, tools=tool_decls)
+        # Single follow-up iteration if it returns tool call
+        if result.get("type") == "tool_call":
+            name = result.get("name")
+            args = result.get("arguments") or {}
+            try:
+                logger.info("EXEC tool=%s session=%s", name, session_id)
+            except Exception:
+                pass
+            tool_result = await self.tools.execute(name, args, session_id=session_id)
+            # Append tool result and ask LLM to produce final answer
+            await self.sessions.add_message(session_id, "assistant", f"TOOL {name} -> {tool_result.get('message')}")
+            messages2 = self._build_messages(await self.sessions.get_session(session_id) or session, "Please finalize the response based on the tool result above.")
+            final = self.llm.chat(messages2, tools=tool_decls)
+            if final.get("type") == "text":
+                await self.sessions.add_message(session_id, "assistant", final.get("content", ""))
+                return {"type": "text", "content": final.get("content", ""), "metadata": {"intent": intent}}
+            # Fallback if second call also returns a tool call: just return tool message
+            await self.sessions.add_message(session_id, "assistant", tool_result.get("message", ""))
+            return {"type": "text", "content": tool_result.get("message", ""), "metadata": {"intent": intent}}
+
+        # If plain text reply
+        if result.get("type") == "text":
+            await self.sessions.add_message(session_id, "assistant", result.get("content", ""))
+            return {"type": "text", "content": result.get("content", ""), "metadata": {"intent": intent}}
+
+        # Last resort empty response
+        await self.sessions.add_message(session_id, "assistant", "")
+        return {"type": "text", "content": "", "metadata": {"intent": intent}}
+
+    async def _handle_registration(self, session_id: str, session: Dict[str, Any], intent: str, entities: Dict[str, Any]) -> Dict[str, Any]:
+        user_type = "supplier" if intent == "registration_supplier" else "customer"
+        name = entities.get("name") or session.get("name")
+        phone = entities.get("phone") or session.get("phone")
+        location = entities.get("location") or session.get("default_location")
+
+        if not phone:
+            msg = "Please provide your phone number to complete registration."
+            await self.sessions.add_message(session_id, "assistant", msg)
+            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+
+        # Create user in DB and update session
+        user_id = await self.db.create_user(phone, name, user_type, location)
+        updates = {
+            "user_id": user_id,
+            "user_type": user_type,
+            "registered": True,
+            "phone": phone,
+            "name": name,
+            "default_location": location,
+        }
+        await self.sessions.update_session(session_id, updates)
+        msg = f"Registration complete. Welcome {name or ''}! You are registered as a {user_type}."
+        await self.sessions.add_message(session_id, "assistant", msg)
+        return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+
+    def _state_for_intent(self, intent: str) -> Optional[str]:
+        mapping = {
+            "registration_customer": States.REGISTERING,
+            "registration_supplier": States.REGISTERING,
+            "place_order": States.ORDERING,
+            "add_inventory": States.ADDING_INVENTORY,
+            "product_inquiry": States.QUERYING,
+            "knowledge_query": States.QUERYING,
+            "check_stock": States.QUERYING,
+            "check_schedule": States.QUERYING,
+            "flash_sale_check": States.QUERYING,
+            "general_chat": States.IDLE,
+        }
+        return mapping.get(intent)
+
+    def _build_messages(self, session: Dict[str, Any], user_message: str) -> List[Dict[str, str]]:
+        # Compose system-like preface
+        user_type = session.get("user_type") or "unknown"
+        registered = session.get("registered", False)
+        name = session.get("name") or ""
+        ctx = session.get("context") or {}
+        context_summary = f"flow={ctx.get('current_flow')}, awaiting={ctx.get('awaiting_confirmation')}"
+        preface = (
+            "You are an Ethiopian horticulture marketplace assistant.\n\n"
+            f"USER CONTEXT: user_type={user_type}, registered={registered}, name={name}\n"
+            f"CURRENT STATE: {context_summary}\n"
+            "Use available tools if needed. Keep responses concise.\n"
+        )
+        history = session.get("conversation_history") or []
+        messages: List[Dict[str, str]] = [{"role": "user", "content": preface}]
+        for h in history[-10:]:
+            role = h.get("role")
+            content = h.get("content")
+            if role in ("user", "assistant") and isinstance(content, str):
+                # Map assistant to model role for Gemini
+                r = "model" if role == "assistant" else "user"
+                messages.append({"role": r, "content": content})
+        messages.append({"role": "user", "content": user_message})
+        return messages
+
+
+def _extract_phone(text: str) -> str | None:
+    # Ethiopian formats: 09XXXXXXXX, +2519XXXXXXXX, 2519XXXXXXXX (allow spaces/dashes)
+    pat = re.compile(r"\b(?:\+?251[-\s]?)?0?9\d{8}\b")
+    m = pat.search(text or "")
+    return m.group(0).replace(" ", "").replace("-", "") if m else None

@@ -1,0 +1,81 @@
+version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL}
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+    ports:
+      - "3005:3000"
+    depends_on:
+      - backend
+    restart: always
+
+  backend:
+    build: ./backend
+    env_file:
+      - ./.env
+    environment:
+      - ENVIRONMENT=production
+    ports:
+      - "8005:8000"
+    depends_on:
+      - postgres
+      - redis
+      - chroma
+    volumes:
+      - backend_static:/app/static
+      - ./data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=horticulture
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:0.5.4
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadata:/chroma
+    restart: always
+
+volumes:
+  pgdata:
+  redisdata:
+  chromadata:
+  backend_static:

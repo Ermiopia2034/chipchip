@@ -1,0 +1,73 @@
+services:
+  frontend:
+    build: ./frontend
+    command: npm run dev -- -p 3000 -H 0.0.0.0
+    ports:
+      - "3005:3000"  # host port incremented by +5
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:8005
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file:
+      - ./.env
+    ports:
+      - "8005:8000"  # host port incremented by +5
+    depends_on:
+      - postgres
+      - redis
+      - chroma
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=horticulture
+    ports:
+      - "5437:5432"  # host port incremented by +5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6384:6379"  # host port incremented by +5
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:0.5.4
+    ports:
+      - "8006:8000"  # host port incremented by +5
+    volumes:
+      - chromadata:/chroma
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  chromadata:
