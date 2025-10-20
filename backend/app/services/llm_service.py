@@ -133,15 +133,17 @@ def _wrap_tools(function_decls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 class LLMService:
     def __init__(self):
         genai.configure(api_key=settings.GEMINI_API_KEY)
+        self._gen_config = {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "max_output_tokens": 2048,
+        }
+        # Default model with tools enabled for tool-calling phases
         self.model = genai.GenerativeModel(
             "gemini-2.5-pro",
             tools=_wrap_tools(_tool_declarations()),
-            generation_config={
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "top_k": 40,
-                "max_output_tokens": 2048,
-            },
+            generation_config=self._gen_config,
         )
 
     def _build_system_prompt(self, user_type: str, registered: bool, user_name: str, context_summary: str, tool_descriptions: str) -> str:
@@ -153,7 +155,7 @@ class LLMService:
             tool_descriptions=tool_descriptions,
         )
 
-    def chat(self, messages: List[Dict[str, str]], tools: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    def chat(self, messages: List[Dict[str, str]], tools: List[Dict[str, Any]] | None = None, allow_tools: bool = True) -> Dict[str, Any]:
         """
         Call Gemini with conversation messages and optional tool declarations.
 
@@ -161,7 +163,13 @@ class LLMService:
         - {"type": "text", "content": str}
         - {"type": "tool_call", "name": str, "arguments": dict}
         """
-        model = self.model if tools is None else genai.GenerativeModel("gemini-2.5-pro", tools=_wrap_tools(tools))
+        if allow_tools:
+            model = self.model if tools is None else genai.GenerativeModel(
+                "gemini-2.5-pro", tools=_wrap_tools(tools), generation_config=self._gen_config
+            )
+        else:
+            # Finalization model without tools to avoid unintended tool calls or refusals
+            model = genai.GenerativeModel("gemini-2.5-pro", generation_config=self._gen_config)
 
         # Convert our {role, content} messages into SDK-friendly contents
         def _coerce_messages(msgs: List[Dict[str, str]]):

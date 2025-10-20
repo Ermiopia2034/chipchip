@@ -73,14 +73,53 @@ class ConversationOrchestrator:
             return await self._handle_registration(session_id, session, intent, entities)
 
         # Deterministic tool routing for intents that map 1:1 to a tool
-        # Knowledge queries should always hit RAG directly to avoid LLM skipping the tool
+        # Knowledge queries should hit RAG directly, then let LLM finalize using the tool result as context
         if intent == "knowledge_query":
             tool_args: Dict[str, Any] = {"query": user_message}
             tool_result = await self.tools.rag_query_handler(tool_args, session_id=session_id)
-            msg = tool_result.get("message", "")
-            # Return grounded RAG result directly to avoid occasional LLM refusals
-            await self.sessions.add_message(session_id, "assistant", msg)
-            return {"type": "text", "content": msg, "metadata": {"intent": intent}}
+            tool_msg = tool_result.get("message", "")
+            # Build a finalization prompt that embeds the tool context, and allow tools if LLM needs them
+            try:
+                session2 = await self.sessions.get_session(session_id) or session
+                # Compose a context block instead of adding a visible assistant/tool message
+                context_block = (
+                    "Retrieved knowledge (context):\n" + tool_msg + "\n\n" +
+                    "Please produce a concise, user-facing answer to the last user question. "
+                    "Do not include metadata labels or list multiple bullets unless clearly relevant."
+                )
+                messages2 = self._build_messages(session2, context_block)
+                tool_decls = _tool_declarations()
+                final = self.llm.chat(messages2, tools=tool_decls, allow_tools=True)
+                if final.get("type") == "tool_call":
+                    # Execute once and finalize
+                    name = final.get("name")
+                    args = final.get("arguments") or {}
+                    tool_res2 = await self.tools.execute(name, args, session_id=session_id)
+                    # Ask the model to finalize based on the new tool output
+                    context_block2 = (
+                        "Additional tool result (context):\n" + (tool_res2.get("message", "")) + "\n\n" +
+                        "Now provide the final concise answer to the user's question."
+                    )
+                    messages3 = self._build_messages(await self.sessions.get_session(session_id) or session2, context_block2)
+                    final2 = self.llm.chat(messages3, tools=tool_decls, allow_tools=True)
+                    if final2.get("type") == "text" and (final2.get("content") or "").strip():
+                        out2 = final2.get("content", "")
+                        await self.sessions.add_message(session_id, "assistant", out2)
+                        return {"type": "text", "content": out2, "metadata": {"intent": intent}}
+                    # Fallback to tool message if still not text
+                    msg2 = tool_res2.get("message", "") or tool_msg
+                    await self.sessions.add_message(session_id, "assistant", msg2)
+                    return {"type": "text", "content": msg2, "metadata": {"intent": intent}}
+                # Plain text from finalization
+                if final.get("type") == "text" and (final.get("content") or "").strip():
+                    out = final.get("content", "")
+                    await self.sessions.add_message(session_id, "assistant", out)
+                    return {"type": "text", "content": out, "metadata": {"intent": intent}}
+            except Exception:
+                pass
+            # Fallback to grounded tool message
+            await self.sessions.add_message(session_id, "assistant", tool_msg)
+            return {"type": "text", "content": tool_msg, "metadata": {"intent": intent}}
 
         if intent == "check_stock":
             tool_result = await self.tools.check_supplier_stock_handler({}, session_id=session_id)

@@ -142,7 +142,7 @@ class ToolRegistry:
         # Heuristic category detection from query if not provided
         ql = query.lower()
         if not category:
-            if any(t in ql for t in ["store", "storage", "keep", "refrigerate", "fridge", "ripe", "ripen"]):
+            if ("stor" in ql) or any(t in ql for t in ["store", "storage", "storing", "keep", "refrigerate", "fridge", "ripe", "ripen"]):
                 category = "storage"
             elif any(t in ql for t in ["nutrition", "nutritional", "vitamin", "calories", "protein"]):
                 category = "nutrition"
