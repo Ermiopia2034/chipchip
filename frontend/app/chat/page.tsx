@@ -6,7 +6,7 @@ import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import QuickActionsBar from "@/components/QuickActionsBar";
-import ChatHistoryMenu from "@/components/ChatHistoryMenu";
+import ChatHistoryFloat from "@/components/ChatHistoryFloat";
 import Link from "next/link";
 import type { ChatMessage as ChatMsg } from "@/lib/chatStore";
 
@@ -36,7 +36,6 @@ function ChatView() {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <ChatHistoryMenu />
         <button
           type="button"
           onClick={() => newThread()}
@@ -50,6 +49,7 @@ function ChatView() {
 
   return (
     <div className="fixed inset-0 px-2 sm:px-6 py-4 overflow-hidden">
+      <ChatHistoryFloat />
       {/* Decorative gradients for chat page */}
       <div className="pointer-events-none absolute -top-24 -left-24 h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--brand)/0.18)_0%,transparent_60%)] float-slow" />
       <div className="pointer-events-none absolute -bottom-24 -right-24 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,hsl(var(--brand-2)/0.18)_0%,transparent_60%)] float-slow float-delay" />
