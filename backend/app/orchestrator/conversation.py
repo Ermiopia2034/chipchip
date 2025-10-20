@@ -280,6 +280,7 @@ class ConversationOrchestrator:
             f"CURRENT STATE: {context_summary}\n"
             "Use available tools if needed. Keep responses concise.\n"
             "Date/time handling: Never ask the user for start/end dates. Resolve phrases like 'today', 'tomorrow', 'this week', 'next week' yourself using the get_current_time tool, and then call schedule/order tools with derived ISO dates. For supplier schedules, you may also call get_supplier_schedule without dates (defaults to current Mon–Sun).\n"
+            "Data integrity: Never fabricate inventory items, order lists, schedules, prices, or quantities. Only present such data if you called a tool this turn and it returned that data. If data is needed, call the appropriate tool first (e.g., check_supplier_stock, get_customer_orders, get_supplier_schedule, suggest_flash_sale).\n"
             "Supplier context: If user_type == 'supplier', treat questions like 'my items expiring' or 'my inventory' as supplier inventory requests — call suggest_flash_sale with days_threshold from the user's phrasing (default 3). Never claim a tool is unavailable for customers when the session user_type is 'supplier'.\n"
             "Expiry checks (suppliers): If asked about expiring items (e.g., 'in the next 3 days'), call suggest_flash_sale with days_threshold (default 3).\n"
         )
@@ -300,6 +301,7 @@ class ConversationOrchestrator:
         tool_decls = _tool_declarations()
         messages = self._build_messages(session, user_message)
         last_tool_msg: str | None = None
+        any_tool_called = False
         max_calls = 3
         for _ in range(max_calls):
             result = self.llm.chat(messages, tools=tool_decls, allow_tools=True)
@@ -311,6 +313,7 @@ class ConversationOrchestrator:
                 except Exception:
                     pass
                 tool_result = await self.tools.execute(name, args, session_id=session_id)
+                any_tool_called = True
                 # If this was the standalone image generation tool, return an explicit image payload for the UI
                 if name == "generate_product_image":
                     try:
@@ -332,24 +335,15 @@ class ConversationOrchestrator:
                 continue
             if result.get("type") == "text":
                 content = result.get("content", "")
-                # If model returned empty text, attempt a no-tools finalization pass
+                # If model returned empty text, steer it to call the right tool rather than fabricate
                 if not (content or "").strip():
-                    try:
-                        session2 = await self.sessions.get_session(session_id) or session
-                        finalize_msg = (
-                            "Finalize your answer to the user's last message now. "
-                            "Provide a concise, helpful reply without calling tools."
-                        )
-                        final_messages = self._build_messages(session2, finalize_msg)
-                        final_res = self.llm.chat(final_messages, tools=None, allow_tools=False)
-                        if final_res.get("type") == "text":
-                            final_text = final_res.get("content", "")
-                            if (final_text or "").strip():
-                                await self.sessions.add_message(session_id, "assistant", final_text)
-                                return {"type": "text", "content": final_text}
-                    except Exception:
-                        pass
-                    # Try another loop iteration allowing tools again
+                    session2 = await self.sessions.get_session(session_id) or session
+                    guidance = (
+                        "Your previous reply was empty. Do not fabricate data. "
+                        "If the user's request requires data (inventory, orders, schedules, prices, knowledge), call the appropriate tool now: "
+                        "inventory→check_supplier_stock, orders→get_customer_orders, schedule→get_supplier_schedule, expiring items→suggest_flash_sale."
+                    )
+                    messages = self._build_messages(session2, guidance)
                     continue
                 await self.sessions.add_message(session_id, "assistant", content)
                 return {"type": "text", "content": content}
@@ -357,8 +351,10 @@ class ConversationOrchestrator:
         if last_tool_msg:
             await self.sessions.add_message(session_id, "assistant", last_tool_msg)
             return {"type": "text", "content": last_tool_msg}
-        await self.sessions.add_message(session_id, "assistant", "")
-        return {"type": "text", "content": ""}
+        # As a last resort, if no tool was called and no content produced, provide a minimal safe completion without fabricating
+        safe = ""
+        await self.sessions.add_message(session_id, "assistant", safe)
+        return {"type": "text", "content": safe}
 
 
 def _extract_phone(text: str) -> str | None:

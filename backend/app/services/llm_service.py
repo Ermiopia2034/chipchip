@@ -124,7 +124,10 @@ def _tool_declarations() -> List[Dict[str, Any]]:
         },
         {
             "name": "check_supplier_stock",
-            "description": "View supplier's current inventory",
+            "description": (
+                "View supplier's current inventory. Use this to answer inventory listing/availability questions. "
+                "Do not present an inventory list without calling this tool when the session user_type is 'supplier'."
+            ),
             "parameters": _schema("OBJECT", properties={}),
         },
         {
@@ -157,7 +160,10 @@ def _tool_declarations() -> List[Dict[str, Any]]:
         },
         {
             "name": "get_customer_orders",
-            "description": "View customer's orders with optional date range and status filter",
+            "description": (
+                "View customer's orders with optional date range and status filter. "
+                "When a date range is needed, compute it yourself (use get_current_time) and do not ask the user."
+            ),
             "parameters": _schema(
                 "OBJECT",
                 properties={
