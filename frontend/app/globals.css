@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --brand: 38 92% 50%; /* hsl(38,92%,50%) warm accent */
+  --brand-2: 210 90% 56%;
+  --brand-3: 270 95% 66%;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  /* Right/top highlight and bottom glow only; remove left vignette to protect hero text */
+  background: radial-gradient(1200px 800px at 80% -20%, hsl(var(--brand-2) / 0.12), transparent 62%),
+    radial-gradient(1000px 600px at 50% 120%, hsl(var(--brand) / 0.10), transparent 62%),
+    var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Subtle grid overlay for depth */
+.bg-grid {
+  background-image: linear-gradient(to right, rgba(120, 120, 120, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(120, 120, 120, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: color-mix(in oklab, var(--background) 92%, transparent);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+}
+
+/* Hero-specific glass: stronger opacity to guarantee contrast */
+.hero-glass {
+  background: rgba(255, 255, 255, 0.98);
+}
+@media (prefers-color-scheme: dark) {
+  .hero-glass { background: rgba(14, 17, 22, 0.92); }
+}
+
+/* Gentle left-to-right lighten to ensure readable hero text */
+.hero-veil {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.65) 0%,
+    rgba(255,255,255,0.25) 22%,
+    rgba(255,255,255,0.10) 42%,
+    transparent 60%
+  );
+}
+@media (prefers-color-scheme: dark) {
+  .hero-veil {
+    background: linear-gradient(90deg,
+      rgba(255,255,255,0.22) 0%,
+      rgba(255,255,255,0.12) 22%,
+      rgba(255,255,255,0.06) 42%,
+      transparent 60%
+    );
+  }
+}
+
+/* Animated accents */
+.float-slow {
+  animation: float-slow 12s ease-in-out infinite;
+}
+.float-delay {
+  animation-delay: 3s;
+}
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) translateX(0) rotate(0deg); }
+  25% { transform: translateY(-8px) translateX(3px) rotate(1deg); }
+  50% { transform: translateY(4px) translateX(-2px) rotate(-1deg); }
+  75% { transform: translateY(-6px) translateX(1px) rotate(0.5deg); }
+}
+
+/* Message appear animation */
+.message-in {
+  animation: message-in 240ms ease-out both;
+}
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Pretty gradient text */
+.hero-text {
+  background: linear-gradient(135deg, hsl(var(--brand-2)) 0%, hsl(var(--brand-3)) 40%, hsl(var(--brand)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Slight glow to separate gradient text from background */
+.hero-text-lift {
+  text-shadow: 0 0 16px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Button glow */
+.btn-glow {
+  box-shadow: 0 0 0 rgba(0,0,0,0);
+  transition: box-shadow 200ms ease, transform 120ms ease;
+}
+.btn-glow:hover { box-shadow: 0 8px 30px hsl(var(--brand-2) / 0.35); transform: translateY(-1px); }
+.btn-glow:active { transform: translateY(0); }
