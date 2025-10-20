@@ -15,6 +15,31 @@ import ProductAdditionCard from "@/components/ProductAdditionCard";
 
 export default function ChatMessage({ message }: { message: Msg }) {
   const isUser = message.role === "user";
+  // Narrow data shapes per kind for strict typing
+  const asImageData = (m: Msg): { url: string } | null => {
+    return m.kind === "image" && m.data && typeof m.data === "object" ? (m.data as { url: string }) : null;
+  };
+  const asPriceData = (
+    m: Msg
+  ): { product?: string; rows?: { label: string; value: number | null }[]; recommended?: number | null } | null => {
+    return m.kind === "prices" && m.data && typeof m.data === "object"
+      ? (m.data as { product?: string; rows?: { label: string; value: number | null }[]; recommended?: number | null })
+      : null;
+  };
+  const asNudgeData = (
+    m: Msg
+  ): { title?: string; suggestions?: { name: string; qty: string; days: number; discount: number }[] } | null => {
+    return m.kind === "nudge" && m.data && typeof m.data === "object"
+      ? (m.data as { title?: string; suggestions?: { name: string; qty: string; days: number; discount: number }[] })
+      : null;
+  };
+  const asScheduleData = (
+    m: Msg
+  ): { entries?: { when: string; count: number; total: number }[] } | null => {
+    return m.kind === "schedule" && m.data && typeof m.data === "object"
+      ? (m.data as { entries?: { when: string; count: number; total: number }[] })
+      : null;
+  };
   return (
     <div className={`w-full flex ${isUser ? "justify-end" : "justify-start"} my-2 message-in`}>
       <div className={`flex items-end gap-2 max-w-[85%] ${isUser ? "flex-row-reverse" : "flex-row"}`}>
@@ -37,60 +62,71 @@ export default function ChatMessage({ message }: { message: Msg }) {
 
           // Assistant rendering by kind
           switch (message.kind) {
-            case "image":
+            case "image": {
+              const d = asImageData(message);
               return (
                 <div className="space-y-2">
-                  <ImageMessage url={message.data?.url} caption={message.content} />
+                  <ImageMessage url={d?.url || ""} caption={message.content} />
                   <div className="text-[10px] mt-1 opacity-70 text-gray-500">
                     {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </div>
                 </div>
               );
+            }
             case "prices":
-              return (
-                <div className="space-y-2">
-                  <PriceSuggestionCard
-                    product={message.data?.product}
-                    rows={message.data?.rows || []}
-                    recommended={message.data?.recommended ?? null}
-                    onAction={(id) => {
-                      // Send a natural language follow-up via event bubbling; the store is not directly available here.
-                      type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: Msg };
-                      const evt = new CustomEvent<ActionDetail>("cc-action", { detail: { id: id as ActionDetail["id"], message } });
-                      window.dispatchEvent(evt);
-                    }}
-                  />
-                  <div className="text-[10px] mt-1 opacity-70 text-gray-500">
-                    {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {
+                const d = asPriceData(message);
+                return (
+                  <div className="space-y-2">
+                    <PriceSuggestionCard
+                      product={d?.product || ""}
+                      rows={d?.rows || []}
+                      recommended={d?.recommended ?? null}
+                      onAction={(id) => {
+                        // Send a natural language follow-up via event bubbling; the store is not directly available here.
+                        type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: Msg };
+                        const evt = new CustomEvent<ActionDetail>("cc-action", { detail: { id: id as ActionDetail["id"], message } });
+                        window.dispatchEvent(evt);
+                      }}
+                    />
+                    <div className="text-[10px] mt-1 opacity-70 text-gray-500">
+                      {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              }
             case "nudge":
-              return (
-                <div className="space-y-2">
-                  <NudgeCard
-                    title={message.data?.title || "Suggestion"}
-                    suggestions={message.data?.suggestions || []}
-                    onAction={(id) => {
-                      type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: Msg };
-                      const evt = new CustomEvent<ActionDetail>("cc-action", { detail: { id: id as ActionDetail["id"], message } });
-                      window.dispatchEvent(evt);
-                    }}
-                  />
-                  <div className="text-[10px] mt-1 opacity-70 text-gray-500">
-                    {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {
+                const d = asNudgeData(message);
+                return (
+                  <div className="space-y-2">
+                    <NudgeCard
+                      title={d?.title || "Suggestion"}
+                      suggestions={d?.suggestions || []}
+                      onAction={(id) => {
+                        type ActionDetail = { id: "use_recommended" | "set_custom" | "run_flash_sale"; message: Msg };
+                        const evt = new CustomEvent<ActionDetail>("cc-action", { detail: { id: id as ActionDetail["id"], message } });
+                        window.dispatchEvent(evt);
+                      }}
+                    />
+                    <div className="text-[10px] mt-1 opacity-70 text-gray-500">
+                      {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              }
             case "schedule":
-              return (
-                <div className="space-y-2">
-                  <ScheduleCard entries={message.data?.entries || []} />
-                  <div className="text-[10px] mt-1 opacity-70 text-gray-500">
-                    {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {
+                const d = asScheduleData(message);
+                return (
+                  <div className="space-y-2">
+                    <ScheduleCard entries={d?.entries || []} />
+                    <div className="text-[10px] mt-1 opacity-70 text-gray-500">
+                      {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              }
             case "order_summary":
               return (
                 <div className="space-y-2">
