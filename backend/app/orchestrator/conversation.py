@@ -329,6 +329,25 @@ class ConversationOrchestrator:
                 continue
             if result.get("type") == "text":
                 content = result.get("content", "")
+                # If model returned empty text, attempt a no-tools finalization pass
+                if not (content or "").strip():
+                    try:
+                        session2 = await self.sessions.get_session(session_id) or session
+                        finalize_msg = (
+                            "Finalize your answer to the user's last message now. "
+                            "Provide a concise, helpful reply without calling tools."
+                        )
+                        final_messages = self._build_messages(session2, finalize_msg)
+                        final_res = self.llm.chat(final_messages, tools=None, allow_tools=False)
+                        if final_res.get("type") == "text":
+                            final_text = final_res.get("content", "")
+                            if (final_text or "").strip():
+                                await self.sessions.add_message(session_id, "assistant", final_text)
+                                return {"type": "text", "content": final_text}
+                    except Exception:
+                        pass
+                    # Try another loop iteration allowing tools again
+                    continue
                 await self.sessions.add_message(session_id, "assistant", content)
                 return {"type": "text", "content": content}
         # Fallbacks
