@@ -144,7 +144,9 @@ def _tool_declarations() -> List[Dict[str, Any]]:
         {
             "name": "suggest_flash_sale",
             "description": (
-                "For suppliers: check expiring inventory and suggest discount actions for items that expire soon."
+                "Supplier-only: check expiring inventory and suggest discount actions for soon-to-expire items. "
+                "If the session user_type is 'supplier', you are authorized to call this. "
+                "Use days_threshold from the user's phrasing (default 3). Do not ask the user for date ranges."
             ),
             "parameters": _schema(
                 "OBJECT",

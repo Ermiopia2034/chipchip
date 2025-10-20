@@ -280,6 +280,7 @@ class ConversationOrchestrator:
             f"CURRENT STATE: {context_summary}\n"
             "Use available tools if needed. Keep responses concise.\n"
             "Date/time handling: Never ask the user for start/end dates. Resolve phrases like 'today', 'tomorrow', 'this week', 'next week' yourself using the get_current_time tool, and then call schedule/order tools with derived ISO dates. For supplier schedules, you may also call get_supplier_schedule without dates (defaults to current Mon–Sun).\n"
+            "Supplier context: If user_type == 'supplier', treat questions like 'my items expiring' or 'my inventory' as supplier inventory requests — call suggest_flash_sale with days_threshold from the user's phrasing (default 3). Never claim a tool is unavailable for customers when the session user_type is 'supplier'.\n"
             "Expiry checks (suppliers): If asked about expiring items (e.g., 'in the next 3 days'), call suggest_flash_sale with days_threshold (default 3).\n"
         )
         history = session.get("conversation_history") or []
