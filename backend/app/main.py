@@ -16,15 +16,47 @@ from app.orchestrator.conversation import ConversationOrchestrator
 fastapi_app = FastAPI(title="Horticulture Chatbot Backend", version="0.1.0")
 
 
-# CORS (frontend runs at host:3005 by compose ports)
-fastapi_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+def _allowed_origins_from_env() -> list[str]:
+    """Compute allowed origins for CORS and Socket.IO.
+
+    Defaults to local dev origins. Extends with values from `ALLOWED_ORIGINS`
+    (comma-separated) or falls back to `NEXT_PUBLIC_BACKEND_URL` when set.
+    Accepts bare hosts or full URLs; adds both http/https variants when possible.
+    """
+    base = [
         "http://localhost:3005",
         "http://localhost:3000",
         "http://127.0.0.1:3005",
         "http://127.0.0.1:3000",
-    ],
+    ]
+    extra = os.getenv("ALLOWED_ORIGINS", "") or os.getenv("NEXT_PUBLIC_BACKEND_URL", "")
+    tokens = [t.strip() for t in extra.split(",") if t.strip()]
+    for t in tokens:
+        if "://" in t:
+            base.append(t)
+            if t.startswith("http://"):
+                base.append(t.replace("http://", "https://", 1))
+            if t.startswith("https://"):
+                base.append(t.replace("https://", "http://", 1))
+        else:
+            base.append(f"http://{t}")
+            base.append(f"https://{t}")
+    # de-duplicate, preserve order
+    seen: set[str] = set()
+    out: list[str] = []
+    for o in base:
+        if o not in seen:
+            seen.add(o)
+            out.append(o)
+    return out
+
+
+# CORS (frontend runs at host:3005 by compose ports)
+_ALLOWED_ORIGINS = _allowed_origins_from_env()
+
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,12 +120,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 # ---------------- Socket.IO setup ----------------
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins=[
-        "http://localhost:3005",
-        "http://localhost:3000",
-        "http://127.0.0.1:3005",
-        "http://127.0.0.1:3000",
-    ],
+    cors_allowed_origins=_ALLOWED_ORIGINS,
     ping_timeout=60,
     ping_interval=25,
 )
