@@ -1,13 +1,13 @@
 import { io, Socket } from "socket.io-client";
 
 function getBackendUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
   if (typeof window !== "undefined") {
-    const { protocol, hostname } = window.location;
-    // Use same host, backend on 8005 per compose; fallback localhost
-    const host = hostname || "localhost";
-    return `${protocol}//${host}:8005`;
+    // Prefer explicit public backend URL; otherwise use same-origin
+    if (envUrl) return envUrl;
+    return window.location.origin;
   }
-  return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8005";
+  return envUrl || "http://localhost:8005";
 }
 
 export type ServerToClientEvents = {
