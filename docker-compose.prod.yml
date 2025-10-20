@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   frontend:
     build:
@@ -43,7 +41,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=horticulture
     ports:
-      - "5432:5432"
+      - "5437:5432"  # host port incremented by +5
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -56,7 +54,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6384:6379"  # host port incremented by +5
     volumes:
       - redisdata:/data
     healthcheck:
@@ -69,7 +67,7 @@ services:
   chroma:
     image: ghcr.io/chroma-core/chroma:0.5.4
     ports:
-      - "8001:8000"
+      - "8006:8000"  # host port incremented by +5
     volumes:
       - chromadata:/chroma
     restart: always
