@@ -110,7 +110,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setMessages(JSON.parse(savedHistory));
       } catch {}
     }
-  }, []);
+  }, [readThreads, loadThreadMessages]);
 
   // Establish session if needed
   useEffect(() => {
@@ -177,7 +177,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
           // If backend intends to start the Add Inventory flow, mirror the
           // Quick Action behavior by injecting the guided form card.
-          const intent = (parsed?.metadata as any)?.intent;
+          let intent: string | undefined = undefined;
+          const meta = parsed?.metadata;
+          if (meta && typeof meta === "object") {
+            const rec = meta as Record<string, unknown>;
+            const v = rec["intent"];
+            if (typeof v === "string") intent = v;
+          }
           const saysOpenForm = /^let[’']s add your product\.?$/i.test(String(parsed?.content || "").trim());
           const shouldOpenInventoryForm =
             parsed?.kind !== "add_inventory_form" && (intent === "add_inventory" || saysOpenForm);
@@ -244,7 +250,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       try { socket.disconnect(); } catch {}
       socketRef.current = null;
     };
-  }, []);
+  }, [readThreads, writeThreads, saveThreadMessages]);
 
   // Actions
   const addMessage = useCallback((msg: ChatMessage) => {
@@ -266,7 +272,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
       return next;
     });
-  }, []);
+  }, [readThreads, writeThreads, saveThreadMessages]);
 
   const sendMessage = useCallback((text: string) => {
     if (!text?.trim()) return;
@@ -280,7 +286,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const clearChat = useCallback(() => {
     setMessages([]);
     if (typeof window !== "undefined") localStorage.removeItem("chat_history");
-  }, []);
+  }, [readThreads, writeThreads, saveThreadMessages]);
 
   const newThread = useCallback(async () => {
     // Clear local conversation
