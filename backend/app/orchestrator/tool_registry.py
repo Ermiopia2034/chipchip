@@ -433,6 +433,7 @@ class ToolRegistry:
             total += qty * price
             order_items.append({
                 "product_id": product.product_id,
+                "product_name": product.product_name,
                 "quantity_kg": qty,
                 "price_per_unit": price,
             })
@@ -449,7 +450,14 @@ class ToolRegistry:
             f"Delivery: {delivery_date.isoformat()} to {delivery_location}\n"
             "Payment: Cash on Delivery\n"
         )
-        return ToolResult.ok({"order_id": order_id, "total": total, "items": order_items}, msg)
+        return ToolResult.ok({
+            "order_id": order_id,
+            "total": total,
+            "items": order_items,
+            "delivery_date": delivery_date.isoformat(),
+            "delivery_location": delivery_location,
+            "payment": "Cash on Delivery",
+        }, msg)
 
     async def add_inventory_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
         if not session_id:
@@ -856,6 +864,7 @@ def _infer_category(product_name: str) -> Optional[str]:
             total += qty * price
             order_items.append({
                 "product_id": product.product_id,
+                "product_name": product.product_name,
                 "quantity_kg": qty,
                 "price_per_unit": price,
             })
@@ -872,7 +881,14 @@ def _infer_category(product_name: str) -> Optional[str]:
             f"Delivery: {delivery_date.isoformat()} to {delivery_location}\n"
             "Payment: Cash on Delivery\n"
         )
-        return ToolResult.ok({"order_id": order_id, "total": total, "items": order_items}, msg)
+        return ToolResult.ok({
+            "order_id": order_id,
+            "total": total,
+            "items": order_items,
+            "delivery_date": delivery_date.isoformat(),
+            "delivery_location": delivery_location,
+            "payment": "Cash on Delivery",
+        }, msg)
 
     async def add_inventory_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
         if not session_id:

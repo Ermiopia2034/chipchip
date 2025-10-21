@@ -344,9 +344,11 @@ class ConversationOrchestrator:
                 if name == "create_order":
                     try:
                         confirmation = tool_result.get("message", "")
+                        data = tool_result.get("data") if isinstance(tool_result, dict) else None
                         if (tool_result.get("success") is True) and (confirmation or "").strip():
                             await self.sessions.add_message(session_id, "assistant", confirmation)
-                            return {"type": "text", "content": confirmation}
+                            # Return structured data alongside text so UI cards can render payment, totals, items
+                            return {"type": "text", "content": confirmation, "data": (data or {})}
                     except Exception:
                         pass
                 last_tool_msg = tool_result.get("message", "")

@@ -152,7 +152,32 @@ export function parseAssistantPayload(payload: unknown): ParsedMessage {
   if (schedule) return { kind: "schedule", content, data: schedule, metadata };
 
   const order = parseOrderSummary(content);
-  if (order) return { kind: "order_summary", content, data: order, metadata };
+  if (order) {
+    // If backend included structured data, prefer/merge it for accuracy
+    if (explicit && typeof explicit === "object") {
+      const items = Array.isArray(explicit["items"]) ? (explicit["items"] as any[]) : null;
+      const total = typeof explicit["total"] === "number" ? (explicit["total"] as number) : null;
+      const deliveryDate = typeof explicit["delivery_date"] === "string" ? (explicit["delivery_date"] as string) : null;
+      const deliveryLoc = typeof explicit["delivery_location"] === "string" ? (explicit["delivery_location"] as string) : null;
+      const payment = typeof explicit["payment"] === "string" ? (explicit["payment"] as string) : null;
+      const oid = typeof explicit["order_id"] === "string" ? (explicit["order_id"] as string) : null;
+      if (oid) order.orderId = oid;
+      if (payment) order.payment = payment;
+      if (total !== null) order.total = total;
+      if (deliveryDate || deliveryLoc) {
+        order.delivery = `${deliveryDate ?? ""}${deliveryLoc ? ` to ${deliveryLoc}` : ""}`.trim();
+      }
+      if (items) {
+        order.items = items.map((it) => ({
+          label: it?.product_name ?? it?.label ?? `#${it?.product_id ?? ""}`,
+          product_name: it?.product_name,
+          quantity_kg: typeof it?.quantity_kg === "number" ? it.quantity_kg : null,
+          price_per_unit: typeof it?.price_per_unit === "number" ? it.price_per_unit : null,
+        }));
+      }
+    }
+    return { kind: "order_summary", content, data: order, metadata };
+  }
 
   const inv = parseInventoryList(content);
   if (inv) return { kind: "inventory", content, data: inv, metadata };

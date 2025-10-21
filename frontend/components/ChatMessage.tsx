@@ -132,23 +132,27 @@ export default function ChatMessage({ message }: { message: Msg }) {
                 <div className="space-y-2">
                   {/* Map parsed data into existing OrderCard shape loosely */}
                   {(() => {
-                    type OrderItemLike = { label?: string; product_name?: string; quantity_kg?: number; price_per_unit?: number };
-                    const d = (message.data as { items?: unknown; total?: unknown; delivery?: unknown }) || {};
+                    type OrderItemLike = { label?: string; product_name?: string; quantity_kg?: number | null; price_per_unit?: number | null; product_id?: number };
+                    const d = (message.data as { items?: unknown; total?: unknown; delivery?: unknown; payment?: unknown }) || {};
                     const items = Array.isArray(d.items) ? (d.items as OrderItemLike[]) : [];
                     const total = typeof d.total === "number" ? d.total : 0;
                     const delivery = typeof d.delivery === "string" ? d.delivery : "";
                     const delivery_location = delivery.includes(" to ") ? delivery.split(" to ")[1] : "";
+                    const delivery_date_only = delivery.includes(" to ") ? delivery.split(" to ")[0] : delivery;
+                    const payment = typeof d.payment === "string" ? d.payment : undefined;
                     return (
                       <OrderCard
                         order={{
                           items: items.map((it) => ({
-                            product_name: it.label || it.product_name,
-                            quantity_kg: it.quantity_kg || 0,
-                            price_per_unit: it.price_per_unit || 0,
+                            product_name: it.product_name || it.label,
+                            product_id: it.product_id,
+                            quantity_kg: typeof it.quantity_kg === "number" ? it.quantity_kg : null,
+                            price_per_unit: typeof it.price_per_unit === "number" ? it.price_per_unit : null,
                           })),
                           total,
-                          delivery_date: delivery,
+                          delivery_date: delivery_date_only,
                           delivery_location,
+                          payment,
                         }}
                       />
                     );
