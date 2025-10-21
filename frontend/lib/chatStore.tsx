@@ -131,44 +131,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
   }, [sessionId]);
 
-  // After we have a session, fetch session info and, if not registered,
-  // auto-inject the Registration form as the first assistant message.
-  useEffect(() => {
-    if (!sessionId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`${backendUrl}/api/sessions/${sessionId}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        const isRegistered = !!(data?.registered);
-        if (!isRegistered) {
-          setMessages((m) => {
-            // Avoid duplicate form injection
-            if (m.some((mm) => mm.kind === "registration_form")) return m;
-            const introText = "Let’s get you registered.";
-            const msg: ChatMessage = {
-              role: "assistant",
-              content: introText,
-              kind: "registration_form",
-              timestamp: Date.now(),
-            };
-            const next = [...m, msg];
-            if (typeof window !== "undefined") localStorage.setItem("chat_history", JSON.stringify(next));
-            const sid = sessionIdRef.current;
-            if (sid) saveThreadMessages(sid, next);
-            return next;
-          });
-        }
-      } catch (e) {
-        console.error("Failed to fetch session info", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, backendUrl, saveThreadMessages]);
+  // Prefer a conversational onboarding driven by the agent itself. No auto-form injection here.
 
   // Socket lifecycle
   useEffect(() => {

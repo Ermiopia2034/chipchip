@@ -32,27 +32,7 @@ class ConversationOrchestrator:
             await self.sessions.create_session()
             session = await self.sessions.get_session(session_id)
 
-        # Capture history length BEFORE recording this turn to detect first user message
-        try:
-            pre_hist = (session.get("conversation_history") or [])
-            is_first_user_turn = len(pre_hist) == 0
-        except Exception:
-            is_first_user_turn = False
-
         await self.sessions.add_message(session_id, "user", user_message)
-
-        # If this is the first user message and the session is not registered,
-        # proactively prompt for registration/login with role choice.
-        if (not session.get("registered")) and is_first_user_turn:
-            prompt = (
-                "Welcome to ChipChip! 👋\n\n"
-                "Before we begin, please register or log in.\n"
-                "Are you a Customer or a Supplier? Reply with 'Customer' or 'Supplier'.\n\n"
-                "To register, share your name and phone (e.g., 'I am a customer, my name is Abebe, phone 0912345678, location Addis Ababa').\n"
-                "If you've registered before, just send your phone number to log in."
-            )
-            await self.sessions.add_message(session_id, "assistant", prompt)
-            return {"type": "text", "content": prompt, "metadata": {"intent": "registration_prompt"}}
 
         # Build state machine from session context
         current_flow = (session.get("context") or {}).get("current_flow") or States.IDLE
@@ -294,6 +274,10 @@ class ConversationOrchestrator:
         name = session.get("name") or ""
         ctx = session.get("context") or {}
         context_summary = f"flow={ctx.get('current_flow')}, awaiting={ctx.get('awaiting_confirmation')}"
+        # Determine if this is the first user turn (no prior conversation history persisted)
+        history = session.get("conversation_history") or []
+        is_first_turn = len(history) == 0
+
         preface = (
             "You are an Ethiopian horticulture marketplace assistant.\n\n"
             f"USER CONTEXT: user_type={user_type}, registered={registered}, name={name}\n"
@@ -305,7 +289,17 @@ class ConversationOrchestrator:
             "Expiry checks (suppliers): If asked about expiring items (e.g., 'in the next 3 days'), call suggest_flash_sale with days_threshold (default 3).\n"
             "Reliability: Never send an empty reply. If a tool returns no data or you cannot produce an answer, explicitly state that no results were found or that the operation could not be completed.\n"
         )
-        history = session.get("conversation_history") or []
+        # First-turn onboarding: if the user is not registered and this is the very first message
+        if (not registered) and is_first_turn:
+            preface += (
+                "Onboarding (first turn, STRICT):\n"
+                "- Start with a brief greeting and ask the user to choose their role: Customer or Supplier.\n"
+                "- Collect details one by one across turns: first role, then name, then phone, then default location.\n"
+                "- DO NOT ask for all fields in one message. Keep each follow-up short.\n"
+                "- As soon as you have user_type and phone (plus any other provided fields), call the register_user tool to register or log in.\n"
+                "- If the user provides only a phone number at any point, attempt login via register_user using the last known role or ask for role if unknown.\n"
+                "- Keep responses concise and conversational.\n"
+            )
         messages: List[Dict[str, str]] = [{"role": "user", "content": preface}]
         for h in history[-10:]:
             role = h.get("role")
