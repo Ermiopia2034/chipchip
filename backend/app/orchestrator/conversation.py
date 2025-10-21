@@ -278,11 +278,14 @@ class ConversationOrchestrator:
         history = session.get("conversation_history") or []
         is_first_turn = len(history) == 0
 
+        # Detect script of the current user message to enforce exact mirroring in the reply
+        user_script = _detect_user_script(user_message)
+
         preface = (
             "You are an Ethiopian horticulture marketplace assistant.\n\n"
             f"USER CONTEXT: user_type={user_type}, registered={registered}, name={name}\n"
             f"CURRENT STATE: {context_summary}\n"
-            "Language & script: Mirror the user's language AND script exactly (English, Amharic Geʽez, or Latin Amharic). Do not switch scripts for Amharic.\n"
+            f"Output script policy (STRICT): last_user_script={user_script}. You MUST respond using the same script: if 'am-geez' then use Geʽez (አማርኛ); if 'am-latin' then write Amharic in Latin letters; if 'en' then write English. Do NOT switch scripts for Amharic.\n"
             "Tool I/O language: INTERNAL tool calls MUST use English. Translate user inputs (products, categories, quantities, locations, dates) to English for tool arguments; convert tool results back to the user's language/script for the reply.\n"
             "Use available tools if needed. Keep responses concise.\n"
             "Date/time handling: Never ask the user for start/end dates. Resolve phrases like 'today', 'tomorrow', 'this week', 'next week' yourself using the get_current_time tool. For explicit dates like 'Oct 25' or '25/10', call parse_date_string to normalize to an ISO date; if no year is given, choose the next occurrence on or after today (prefer day‑first for numeric dates in Ethiopia). Then call schedule/order tools with the derived ISO dates. For supplier schedules, you may also call get_supplier_schedule without dates (defaults to current Mon–Sun).\n"
@@ -394,3 +397,39 @@ def _extract_phone(text: str) -> str | None:
     pat = re.compile(r"\b(?:\+?251[-\s]?)?0?9\d{8}\b")
     m = pat.search(text or "")
     return m.group(0).replace(" ", "").replace("-", "") if m else None
+
+
+def _detect_user_script(text: str) -> str:
+    """
+    Heuristically detect the user's script for the last message.
+
+    Returns one of: 'am-geez', 'am-latin', 'en'.
+    - If any Geʽez characters are present → 'am-geez'.
+    - Else, if Latin text contains common Amharic transliteration tokens → 'am-latin'.
+    - Else → 'en'.
+    """
+    try:
+        if not text:
+            return "en"
+        # Geʽez Unicode block: 1200–137F (and extended 1380–139F, 2D80–2DDF). Check primary range.
+        for ch in text:
+            code = ord(ch)
+            if (0x1200 <= code <= 0x137F) or (0x1380 <= code <= 0x139F) or (0x2D80 <= code <= 0x2DDF):
+                return "am-geez"
+        s = text.lower()
+        # Common Latin-Amharic tokens (non-exhaustive, tuned for marketplace chat)
+        tokens = [
+            "selam", "endet", "indet", "neh", "nesh", "amaseg", "ameseg", "amasegnallo", "amaseginalehu",
+            "ezez", "ezezi", "ezezilign", "tinish", "beka", "betam", "yene", "ena", "wede", "minalesh",
+            "keysir", "karot", "timatim", "shinkurt", "qariya", "qaria", "qariya", "qariya", "berbere", "injera",
+            "qima", "kilo", "kg", "qey", "sir", "qey sir", "qeyisir",
+        ]
+        if any(tok in s for tok in tokens):
+            return "am-latin"
+        # If message contains only ASCII letters and spaces/punct, assume English
+        if all(("\u0000" <= ch <= "\u007F") for ch in text):
+            return "en"
+        # Default to English
+        return "en"
+    except Exception:
+        return "en"

@@ -94,7 +94,8 @@ function parseSchedule(content: string) {
 
 function parseOrderSummary(content: string) {
   if (!/^Order confirmed!/i.test(content)) return null;
-  const id = content.match(/Order ID:\s*(\d+)/i)?.[1];
+  // Capture any non-newline sequence (UUIDs, etc.) and trim
+  const id = content.match(/Order ID:\s*([^\n]+)/i)?.[1]?.trim();
   const total = content.match(/Total:\s*(\d+(?:\.\d+)?)\s*ETB/i)?.[1];
   const delivery = content.match(/Delivery:\s*([^\n]+)/i)?.[1];
   const payment = /Payment:\s*(.*)/i.exec(content)?.[1];
@@ -154,7 +155,17 @@ export function parseAssistantPayload(payload: unknown): ParsedMessage {
     const total = typeof totalRaw === "number" ? totalRaw : Number(totalRaw as unknown) || 0;
     const delivery = content.match(/Delivery:\s*([^\n]+)/i)?.[1];
     const payment = content.match(/Payment:\s*([^\n]+)/i)?.[1];
-    return { kind: "order_summary", content, data: { items, total, delivery, payment }, metadata };
+    // Preserve order id if provided by backend (both snake_case and camelCase supported)
+    const explicitOid = ((): string | undefined => {
+      const v = (explicit as Record<string, unknown>)["order_id"] ?? (explicit as Record<string, unknown>)["orderId"];
+      return typeof v === "string" ? v : undefined;
+    })();
+    return {
+      kind: "order_summary",
+      content,
+      data: { items, total, delivery, payment, orderId: explicitOid, order_id: explicitOid },
+      metadata,
+    };
   }
 
   // Do not auto-open guided forms based on backend types; forms are opened via UI actions only.

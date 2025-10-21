@@ -133,13 +133,14 @@ export default function ChatMessage({ message }: { message: Msg }) {
                   {/* Map parsed data into existing OrderCard shape loosely */}
                   {(() => {
                     type OrderItemLike = { label?: string; product_name?: string; quantity_kg?: number | null; price_per_unit?: number | null; product_id?: number };
-                    const d = (message.data as { items?: unknown; total?: unknown; delivery?: unknown; payment?: unknown }) || {};
+                    const d = (message.data as { items?: unknown; total?: unknown; delivery?: unknown; payment?: unknown; orderId?: unknown; order_id?: unknown }) || {};
                     const items = Array.isArray(d.items) ? (d.items as OrderItemLike[]) : [];
                     const total = typeof d.total === "number" ? d.total : 0;
                     const delivery = typeof d.delivery === "string" ? d.delivery : "";
                     const delivery_location = delivery.includes(" to ") ? delivery.split(" to ")[1] : "";
                     const delivery_date_only = delivery.includes(" to ") ? delivery.split(" to ")[0] : delivery;
                     const payment = typeof d.payment === "string" ? d.payment : undefined;
+                    const order_id = typeof (d as any).orderId === "string" ? (d as any).orderId : (typeof (d as any).order_id === "string" ? (d as any).order_id : undefined);
                     return (
                       <OrderCard
                         order={{
@@ -153,6 +154,7 @@ export default function ChatMessage({ message }: { message: Msg }) {
                           delivery_date: delivery_date_only,
                           delivery_location,
                           payment,
+                          order_id,
                         }}
                       />
                     );
