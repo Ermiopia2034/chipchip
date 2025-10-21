@@ -132,6 +132,31 @@ export function parseAssistantPayload(payload: unknown): ParsedMessage {
     return { kind: "image", content, data: { url: explicit["url"] }, metadata };
   }
 
+  // Explicit order data from tools (preferred over text parsing)
+  const explicitItemsRaw = Array.isArray(explicit["items"]) ? (explicit["items"] as unknown[]) : null;
+  if (explicitItemsRaw) {
+    const items = explicitItemsRaw
+      .map((it) => (it && typeof it === "object" ? (it as Record<string, unknown>) : null))
+      .filter(Boolean)
+      .map((it) => ({
+        product_id: typeof it!.product_id === "number" ? (it!.product_id as number) : undefined,
+        product_name: typeof it!.product_name === "string" ? (it!.product_name as string) : undefined,
+        quantity_kg:
+          typeof it!.quantity_kg === "number"
+            ? (it!.quantity_kg as number)
+            : Number((it!.quantity_kg as unknown) ?? 0) || 0,
+        price_per_unit:
+          typeof it!.price_per_unit === "number"
+            ? (it!.price_per_unit as number)
+            : Number((it!.price_per_unit as unknown) ?? 0) || 0,
+      }));
+    const totalRaw = explicit["total"];
+    const total = typeof totalRaw === "number" ? totalRaw : Number(totalRaw as unknown) || 0;
+    const delivery = content.match(/Delivery:\s*([^\n]+)/i)?.[1];
+    const payment = content.match(/Payment:\s*([^\n]+)/i)?.[1];
+    return { kind: "order_summary", content, data: { items, total, delivery, payment }, metadata };
+  }
+
   // Do not auto-open guided forms based on backend types; forms are opened via UI actions only.
 
   const imageUrl = parseImageFromContent(content);
