@@ -4,6 +4,13 @@ This repository contains an MVP bilingual chatbot for Ethiopian horticulture e-c
 
 Refer to architecture_document.md and implementation_plan.md for full design details.
 
+## Tech Stack (Concise)
+- Frontend: Next.js 14 (App Router), TypeScript, Tailwind, Socket.IO client
+- Backend: FastAPI (ASGI), Python 3.11, Socket.IO
+- Datastores: PostgreSQL 15, Redis 7, Chroma (vector DB)
+- AI: Gemini 2.5 Pro (chat/tools), text-embedding-004 (embeddings), Gemini Image
+- Infra: Docker + Docker Compose
+
 ## Quick Start
 
 - Prerequisites: Docker, Docker Compose, Node.js 20 (for local dev), Python 3.11 (optional)
@@ -37,7 +44,7 @@ docker compose up --build
 │   │   └── config.py         # Basic settings
 │   ├── requirements.txt
 │   ├── Dockerfile
-│   └── scripts/              # Placeholders for Milestone 2
+│   └── scripts/              # Data scripts: init_db.py, load_dataset.py, validate_data.py
 ├── frontend/                 # Next.js 14 (App Router, TS, Tailwind)
 │   └── Dockerfile
 ├── data/

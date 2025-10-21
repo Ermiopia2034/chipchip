@@ -7,9 +7,9 @@ type Order = { items: OrderItem[]; total: number; delivery_date: string; deliver
 
 export default function OrderCard({ order }: { order: Order }) {
   return (
-    <div className="border rounded-md p-3 bg-white shadow-sm">
-      <div className="font-semibold">Order Summary</div>
-      <div className="text-sm text-gray-600">Delivery: {order.delivery_date} → {order.delivery_location}</div>
+    <div className="rounded-2xl border border-black/10 dark:border-white/10 glass p-4">
+      <div className="font-semibold text-sm tracking-tight">Order Summary</div>
+      <div className="text-sm text-gray-600 dark:text-gray-300">Delivery: {order.delivery_date} → {order.delivery_location}</div>
       <ul className="mt-2 text-sm list-disc pl-5">
         {order.items.map((it, i) => (
           <li key={i}>{it.quantity_kg} kg {it.product_name || `#${it.product_id}`} @ {it.price_per_unit} ETB/kg</li>
@@ -19,4 +19,3 @@ export default function OrderCard({ order }: { order: Order }) {
     </div>
   );
 }
-

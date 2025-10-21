@@ -32,7 +32,27 @@ class ConversationOrchestrator:
             await self.sessions.create_session()
             session = await self.sessions.get_session(session_id)
 
+        # Capture history length BEFORE recording this turn to detect first user message
+        try:
+            pre_hist = (session.get("conversation_history") or [])
+            is_first_user_turn = len(pre_hist) == 0
+        except Exception:
+            is_first_user_turn = False
+
         await self.sessions.add_message(session_id, "user", user_message)
+
+        # If this is the first user message and the session is not registered,
+        # proactively prompt for registration/login with role choice.
+        if (not session.get("registered")) and is_first_user_turn:
+            prompt = (
+                "Welcome to ChipChip! 👋\n\n"
+                "Before we begin, please register or log in.\n"
+                "Are you a Customer or a Supplier? Reply with 'Customer' or 'Supplier'.\n\n"
+                "To register, share your name and phone (e.g., 'I am a customer, my name is Abebe, phone 0912345678, location Addis Ababa').\n"
+                "If you've registered before, just send your phone number to log in."
+            )
+            await self.sessions.add_message(session_id, "assistant", prompt)
+            return {"type": "text", "content": prompt, "metadata": {"intent": "registration_prompt"}}
 
         # Build state machine from session context
         current_flow = (session.get("context") or {}).get("current_flow") or States.IDLE
