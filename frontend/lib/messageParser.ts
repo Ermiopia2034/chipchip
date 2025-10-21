@@ -19,6 +19,22 @@ export type ParsedMessage = {
   metadata?: unknown;
 };
 
+// Backend may attach structured order data alongside the confirmation text.
+// This mirrors the shape returned by the order tool.
+type ExplicitOrderItem = {
+  product_id?: number;
+  product_name?: string;
+  quantity_kg?: number;
+  price_per_unit?: number;
+  label?: string;
+};
+
+function isExplicitOrderItem(x: unknown): x is ExplicitOrderItem {
+  if (!x || typeof x !== "object") return false;
+  // Light guard: allow partials; detailed type checks done on read.
+  return true;
+}
+
 function parseImageFromContent(content: string): string | null {
   const m = content.match(/Image:\s*(\/static\/images\/\S+)/i);
   return m ? m[1] : null;
@@ -155,7 +171,7 @@ export function parseAssistantPayload(payload: unknown): ParsedMessage {
   if (order) {
     // If backend included structured data, prefer/merge it for accuracy
     if (explicit && typeof explicit === "object") {
-      const items = Array.isArray(explicit["items"]) ? (explicit["items"] as any[]) : null;
+      const items = Array.isArray(explicit["items"]) ? (explicit["items"] as unknown[]).filter(isExplicitOrderItem) : null;
       const total = typeof explicit["total"] === "number" ? (explicit["total"] as number) : null;
       const deliveryDate = typeof explicit["delivery_date"] === "string" ? (explicit["delivery_date"] as string) : null;
       const deliveryLoc = typeof explicit["delivery_location"] === "string" ? (explicit["delivery_location"] as string) : null;
