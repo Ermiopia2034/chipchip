@@ -35,6 +35,7 @@ class ToolRegistry:
         self.sessions = sessions or SessionManager()
 
         self._handlers = {
+            "parse_date_string": self.parse_date_string_handler,
             "get_current_time": self.get_current_time_handler,
             "register_user": self.register_user_handler,
             "search_products": self.search_products_handler,
@@ -63,6 +64,105 @@ class ToolRegistry:
         except Exception as e:
             logging.getLogger(__name__).exception("Tool '%s' failed: %s", name, e)
             return ToolResult.fail(f"{name} failed: {e}")
+
+    async def parse_date_string_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
+        """
+        Parse a human date string relative to today and return an ISO date.
+
+        Rules:
+        - Accept month names ("Oct 25", "25 October") with optional year.
+        - Accept numeric day-first formats common in Ethiopia ("25/10", "25-10").
+        - If year is omitted, choose the next occurrence on or after today; if computed date is in the past, roll to next year.
+        - Returns {"date": "YYYY-MM-DD"} in data and a short message.
+        """
+        import re
+        today = dt.date.today()
+        raw = str(args.get("text", "")).strip()
+        if not raw:
+            return ToolResult.fail("text is required")
+
+        s = raw.lower().strip()
+        # Quick keywords
+        if s in {"today", "ማንኛውም ዛሬ", "ከዛሬ", "ትዕግስት ዛሬ"}:  # include rough Amharic variants
+            return ToolResult.ok({"date": today.isoformat()}, f"Parsed date: {today.isoformat()}")
+        if s in {"tomorrow", "ነገ"}:
+            d = today + dt.timedelta(days=1)
+            return ToolResult.ok({"date": d.isoformat()}, f"Parsed date: {d.isoformat()}")
+
+        # Month name map
+        months = {
+            "jan": 1, "january": 1,
+            "feb": 2, "february": 2,
+            "mar": 3, "march": 3,
+            "apr": 4, "april": 4,
+            "may": 5,
+            "jun": 6, "june": 6,
+            "jul": 7, "july": 7,
+            "aug": 8, "august": 8,
+            "sep": 9, "sept": 9, "september": 9,
+            "oct": 10, "october": 10,
+            "nov": 11, "november": 11,
+            "dec": 12, "december": 12,
+        }
+
+        def _mk_date(year: int, month: int, day: int) -> Optional[dt.date]:
+            try:
+                return dt.date(year, month, day)
+            except Exception:
+                return None
+
+        # Pattern 1: Month name then day, optional year e.g., "oct 25", "october 25, 2025"
+        m = re.search(r"\b(?P<mon>[a-zA-Z]{3,9})\s+(?P<day>\d{1,2})(?:\D+(?P<year>\d{4}))?\b", s)
+        if m and m.group("mon").lower() in months:
+            mon = months[m.group("mon").lower()]
+            day = int(m.group("day"))
+            year = int(m.group("year")) if m.group("year") else today.year
+            candidate = _mk_date(year, mon, day)
+            if candidate is None:
+                return ToolResult.fail("Invalid date components")
+            if not m.group("year") and candidate < today:
+                candidate = _mk_date(year + 1, mon, day)
+                if candidate is None:
+                    return ToolResult.fail("Invalid date components")
+            return ToolResult.ok({"date": candidate.isoformat()}, f"Parsed date: {candidate.isoformat()}")
+
+        # Pattern 2: Day then month name e.g., "25 oct", "25 october 2025"
+        m2 = re.search(r"\b(?P<day>\d{1,2})\s+(?P<mon>[a-zA-Z]{3,9})(?:\D+(?P<year>\d{4}))?\b", s)
+        if m2 and m2.group("mon").lower() in months:
+            mon = months[m2.group("mon").lower()]
+            day = int(m2.group("day"))
+            year = int(m2.group("year")) if m2.group("year") else today.year
+            candidate = _mk_date(year, mon, day)
+            if candidate is None:
+                return ToolResult.fail("Invalid date components")
+            if not m2.group("year") and candidate < today:
+                candidate = _mk_date(year + 1, mon, day)
+                if candidate is None:
+                    return ToolResult.fail("Invalid date components")
+            return ToolResult.ok({"date": candidate.isoformat()}, f"Parsed date: {candidate.isoformat()}")
+
+        # Pattern 3: Numeric day-first common in Ethiopia: 25/10[/2025] or 25-10-2025
+        m3 = re.search(r"\b(?P<a>\d{1,2})[/-](?P<b>\d{1,2})(?:[/-](?P<year>\d{4}))?\b", s)
+        if m3:
+            a = int(m3.group("a"))
+            b = int(m3.group("b"))
+            year = int(m3.group("year")) if m3.group("year") else today.year
+            # Heuristic: prefer day-first; if the first number <=12 and second >12, swap
+            if a <= 12 and b > 12:
+                # Means a is month, b is day; swap to day-first
+                day, month = b, a
+            else:
+                day, month = a, b
+            candidate = _mk_date(year, month, day)
+            if candidate is None:
+                return ToolResult.fail("Invalid date components")
+            if not m3.group("year") and candidate < today:
+                candidate = _mk_date(year + 1, month, day)
+                if candidate is None:
+                    return ToolResult.fail("Invalid date components")
+            return ToolResult.ok({"date": candidate.isoformat()}, f"Parsed date: {candidate.isoformat()}")
+
+        return ToolResult.fail("Could not parse date string")
 
     async def get_current_time_handler(self, args: Dict[str, Any], *, session_id: Optional[str]) -> ToolResult:
         import datetime as dt
@@ -314,6 +414,9 @@ class ToolRegistry:
             delivery_date = delivery_date_raw
         else:
             raise ValueError("Invalid delivery_date format")
+        # Guard against past dates
+        if delivery_date < dt.date.today():
+            return ToolResult.fail(f"Delivery date {delivery_date.isoformat()} is in the past. Please choose today or a future date.")
 
         order_items: List[Dict[str, Any]] = []
         total = 0.0
@@ -731,6 +834,9 @@ def _infer_category(product_name: str) -> Optional[str]:
             delivery_date = delivery_date_raw
         else:
             raise ValueError("Invalid delivery_date format")
+        # Guard against past dates
+        if delivery_date < dt.date.today():
+            return ToolResult.fail(f"Delivery date {delivery_date.isoformat()} is in the past. Please choose today or a future date.")
 
         order_items: List[Dict[str, Any]] = []
         total = 0.0

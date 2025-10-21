@@ -24,6 +24,21 @@ def _tool_declarations() -> List[Dict[str, Any]]:
     # Gemini function declarations using Schema with type_ field and enum names
     fns = [
         {
+            "name": "parse_date_string",
+            "description": (
+                "Parse a natural-language date like 'Oct 25' or '25/10' relative to today and return an ISO date. "
+                "If the year is missing, choose the next occurrence on or after today; if it would be in the past, roll to next year. "
+                "Prefer day-first formats for numeric dates in Ethiopia (e.g., 25/10 => 25 Oct)."
+            ),
+            "parameters": _schema(
+                "OBJECT",
+                properties={
+                    "text": _schema("STRING"),
+                },
+                required=["text"],
+            ),
+        },
+        {
             "name": "get_current_time",
             "description": (
                 "Return the current date/time and week boundaries. "

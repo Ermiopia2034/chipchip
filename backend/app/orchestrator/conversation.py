@@ -279,7 +279,7 @@ class ConversationOrchestrator:
             f"USER CONTEXT: user_type={user_type}, registered={registered}, name={name}\n"
             f"CURRENT STATE: {context_summary}\n"
             "Use available tools if needed. Keep responses concise.\n"
-            "Date/time handling: Never ask the user for start/end dates. Resolve phrases like 'today', 'tomorrow', 'this week', 'next week' yourself using the get_current_time tool, and then call schedule/order tools with derived ISO dates. For supplier schedules, you may also call get_supplier_schedule without dates (defaults to current Mon–Sun).\n"
+            "Date/time handling: Never ask the user for start/end dates. Resolve phrases like 'today', 'tomorrow', 'this week', 'next week' yourself using the get_current_time tool. For explicit dates like 'Oct 25' or '25/10', call parse_date_string to normalize to an ISO date; if no year is given, choose the next occurrence on or after today (prefer day‑first for numeric dates in Ethiopia). Then call schedule/order tools with the derived ISO dates. For supplier schedules, you may also call get_supplier_schedule without dates (defaults to current Mon–Sun).\n"
             "Data integrity: Never fabricate inventory items, order lists, schedules, prices, or quantities. Only present such data if you called a tool this turn and it returned that data. If data is needed, call the appropriate tool first (e.g., check_supplier_stock, get_customer_orders, get_supplier_schedule, suggest_flash_sale).\n"
             "Supplier context: If user_type == 'supplier', treat questions like 'my items expiring' or 'my inventory' as supplier inventory requests — call suggest_flash_sale with days_threshold from the user's phrasing (default 3). Never claim a tool is unavailable for customers when the session user_type is 'supplier'.\n"
             "Expiry checks (suppliers): If asked about expiring items (e.g., 'in the next 3 days'), call suggest_flash_sale with days_threshold (default 3).\n"
@@ -324,6 +324,15 @@ class ConversationOrchestrator:
                             caption = tool_result.get("message", "")
                             await self.sessions.add_message(session_id, "assistant", caption)
                             return {"type": "image", "content": caption, "data": {"url": url}}
+                    except Exception:
+                        pass
+                # For order confirmations, return the tool message directly so totals and payment details are preserved
+                if name == "create_order":
+                    try:
+                        confirmation = tool_result.get("message", "")
+                        if (tool_result.get("success") is True) and (confirmation or "").strip():
+                            await self.sessions.add_message(session_id, "assistant", confirmation)
+                            return {"type": "text", "content": confirmation}
                     except Exception:
                         pass
                 last_tool_msg = tool_result.get("message", "")
